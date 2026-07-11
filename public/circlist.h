@@ -1,5 +1,4 @@
-#ifndef __CIRCLIST_H__
-#define __CIRCLIST_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -177,4 +176,3 @@ circlist_delete_item(struct circlist_item **list,
    }
 }
 
-#endif /* __CIRCLIST_H__ */

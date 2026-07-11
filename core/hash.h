@@ -1,5 +1,4 @@
-#ifndef __HASH_H__
-#define __HASH_H__
+#pragma once
 
 #include <string.h>
 #include "basic_defs.h"
@@ -135,4 +134,3 @@ void hash4_calc(const void *buf, size_t len, uint8 hash[4]);
 
 void sha256_calc(const void *buf, size_t bufLen, uint256 *digest);
 
-#endif /* __HASH_H__ */

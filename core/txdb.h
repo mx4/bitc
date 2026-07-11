@@ -1,5 +1,4 @@
-#ifndef __TXDB_H__
-#define __TXDB_H__
+#pragma once
 
 #include "hash.h"
 #include "bitc-defs.h"
@@ -22,4 +21,3 @@ uint64 txdb_get_balance(struct txdb *txdb);
 void txdb_confirm_one_tx(struct txdb *txdb, const uint256 *blkHash,
                          const uint256 *txHash);
 
-#endif /* __TXDB_H__ */

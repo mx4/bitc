@@ -1,5 +1,4 @@
-#ifndef __HASHTABLE_H__
-#define __HASHTABLE_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -49,4 +48,3 @@ void hashtable_linearize(const struct hashtable *ht,
                          size_t entry_size, void **ptr);
 
 
-#endif /* __HASHTABLE_H__ */

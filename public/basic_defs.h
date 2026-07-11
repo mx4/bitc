@@ -1,4 +1,4 @@
-#ifndef __BASIC_DEFS_H__
+#pragma once
 
 #ifdef linux
 #include <stdio.h>
@@ -99,5 +99,3 @@ maximum(uint32 a, uint32 b)
 {
    return MAX(a, b);
 }
-
-#endif

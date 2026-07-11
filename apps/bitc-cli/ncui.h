@@ -1,5 +1,4 @@
-#ifndef __NCUI_H__
-#define __NCUI_H__
+#pragma once
 
 int  ncui_init(void);
 void ncui_exit(void);
@@ -15,4 +14,3 @@ void ncui_peers_update(void);
 void ncui_tx_update(void);
 void ncui_fx_update(void);
 
-#endif /* __NCUI_H__ */

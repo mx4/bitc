@@ -1,5 +1,4 @@
-#ifndef __BLOOM_H__
-#define __BLOOM_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -11,4 +10,3 @@ void bloom_add(struct bloom_filter *f, const void *data, size_t len);
 void bloom_getinfo(const struct bloom_filter *f, uint8 **filter,
                    uint32 *filterSize, uint32 *numHashFuncs, uint32 *tweak);
 
-#endif /* __BLOOM_H__ */

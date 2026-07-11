@@ -1,5 +1,4 @@
-#ifndef __SCRIPT_H__
-#define __SCRIPT_H__
+#pragma once
 
 #include "hash.h"
 #include "bitc-defs.h"
@@ -174,4 +173,3 @@ int script_parse_pubkey_hash(const uint8 *scriptPubKey, size_t scriptLength,
                              uint160 *pubkey);
 
 
-#endif /* __SCRIPT_H__ */

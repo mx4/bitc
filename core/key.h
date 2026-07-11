@@ -1,5 +1,4 @@
-#ifndef __KEY_H__
-#define __KEY_H__
+#pragma once
 
 #include "hash.h"
 
@@ -20,4 +19,3 @@ bool key_sign(struct key *k, const void *data, size_t len,
 bool key_verify(struct key *k, const void *data, size_t datalen,
                 const void *sig, size_t siglen);
 
-#endif /* __KEY_H__ */

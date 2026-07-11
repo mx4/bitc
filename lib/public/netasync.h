@@ -1,5 +1,4 @@
-#ifndef __NETASYNC_H__
-#define __NETASYNC_H__
+#pragma once
 
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -58,4 +57,3 @@ void
 netasync_use_socks(struct netasync_socket *sock,
                    const char *hostname, short port);
 
-#endif /* __NETASYNC_H__ */

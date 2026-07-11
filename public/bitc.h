@@ -1,5 +1,4 @@
-#ifndef __BTC_H__
-#define __BTC_H__
+#pragma once
 
 
 enum bitc_state {
@@ -129,4 +128,3 @@ bitc_exiting(void)
 }
 
 
-#endif /* __BTC_H__ */

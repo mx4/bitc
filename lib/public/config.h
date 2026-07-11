@@ -1,5 +1,4 @@
-#ifndef __CONFIG_H__
-#define __CONFIG_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -27,4 +26,3 @@ void config_setint64(struct config *config, int64 val,
 bool config_isset(struct config *config,
                   const char *fmt, ...) PRINTF_GCC_DECL(2, 3);
 
-#endif /* __CONFIG_H__ */

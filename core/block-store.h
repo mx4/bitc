@@ -1,5 +1,4 @@
-#ifndef __BLOCK_STORE_H__
-#define __BLOCK_STORE_H__
+#pragma once
 
 #include <time.h>
 
@@ -39,4 +38,3 @@ bool
 blockstore_get_block_at_height(struct blockstore *bs, int height, uint256 *hash,
                                btc_block_header *header);
 
-#endif /* __BLOCK_STORE_H__ */

@@ -1,5 +1,4 @@
-#ifndef __WALLET_H__
-#define __WALLET_H__
+#pragma once
 
 #include "hash.h"
 #include "bitc-defs.h"
@@ -42,4 +41,3 @@ void wallet_get_bloom_filter_info(const struct wallet *wallet,
                                   uint8 **filter, uint32 *filterSize,
                                   uint32 *numHashFuncs, uint32 *tweak);
 
-#endif /* __WALLET_H__ */

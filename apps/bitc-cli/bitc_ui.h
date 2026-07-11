@@ -1,5 +1,4 @@
-#ifndef __BITC_UI_H__
-#define __BITC_UI_H__
+#pragma once
 
 #include <netinet/in.h>
 #include <pthread.h>
@@ -141,4 +140,3 @@ void bitcui_stop(void);
 int  bitcui_start(bool withui);
 void bitcui_req_notify_info_update(void);
 
-#endif /* __BITC_UI_H__ */

@@ -1,5 +1,4 @@
-#ifndef __FILE_H__
-#define __FILE_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -48,4 +47,3 @@ int file_rotate(const char *filename, uint32 n);
 int file_rename(const char *src, const char *dst);
 int file_chmod(const char *filename, uint32 mode);
 
-#endif /* __FILE_H__ */

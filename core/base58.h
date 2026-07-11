@@ -1,5 +1,4 @@
-#ifndef __BASE58_H__
-#define __BASE58_H__
+#pragma once
 
 #include "hash.h"
 
@@ -19,4 +18,3 @@ bool  b58_privkey_to_bytes(const char *addr, uint8 **key, size_t *keylen);
 char *b58_bytes_to_privkey(const uint8 *key, size_t len);
 char *b58_bytes_to_pubkey(const uint8 *key, size_t len);
 
-#endif /* __BASE58_H__ */

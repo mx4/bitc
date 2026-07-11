@@ -1,5 +1,4 @@
-#ifndef __CRYPT_H__
-#define __CRYPT_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -46,4 +45,3 @@ crypt_hmac_sha256(const void *text, size_t text_len,
                   const uint8 *key,  size_t key_len,
                   uint256 *digest);
 
-#endif /* __CRYPT_H__ */

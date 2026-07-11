@@ -1,5 +1,4 @@
-#ifndef __BUFF_H__
-#define __BUFF_H__
+#pragma once
 
 #include <string.h>
 #include <stdlib.h>
@@ -390,4 +389,3 @@ buff_dup(const struct buff *buf)
 }
 
 
-#endif /* __BUFF_H__ */

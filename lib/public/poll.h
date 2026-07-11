@@ -1,5 +1,4 @@
-#ifndef __POLL_H__
-#define __POLL_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -45,4 +44,3 @@ void poll_callback_device(struct poll_loop *poll,
 			  pollcallback_fun func,
 			  void *clientData);
 
-#endif /* __POLL_H__ */

@@ -1,5 +1,4 @@
-#ifndef __IP_INFO_H__
-#define __IP_INFO_H__
+#pragma once
 
 #include <netinet/in.h>
 
@@ -38,4 +37,3 @@ void ipinfo_init(void);
 void ipinfo_exit(void);
 
 
-#endif /* __IP_INFO_H__ */

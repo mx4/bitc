@@ -1,5 +1,4 @@
-#ifndef __ADDRBOOK_H__
-#define __ADDRBOOK_H__
+#pragma once
 
 #include "config.h"
 #include "bitc-defs.h"
@@ -23,4 +22,3 @@ struct peer_addr* addrbook_get_rand_addr(const struct addrbook *book);
 void addrbook_remove_entry(struct addrbook *book, const struct peer_addr *paddr);
 void addrbook_replace_entry(struct addrbook *book, struct peer_addr *paddr);
 
-#endif /* __ADDRBOOK_H__ */

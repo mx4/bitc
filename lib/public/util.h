@@ -1,5 +1,4 @@
-#ifndef __UTIL_H__
-#define __UTIL_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -126,4 +125,3 @@ void condvar_free(struct condvar *cv);
             STR(_x));                                   \
    }
 
-#endif /* __UTIL_H__ */

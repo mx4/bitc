@@ -1,5 +1,4 @@
-#ifndef __ATOMIC_H__
-#define __ATOMIC_H__
+#pragma once
 
 #include "basic_defs.h"
 
@@ -253,4 +252,3 @@ atomic64_cmpxchg(atomic_uint64 *var,
    return __sync_val_compare_and_swap(&var->value, old, new);
 }
 
-#endif /* __ATOMIC_H__ */

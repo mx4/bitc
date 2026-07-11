@@ -1,5 +1,4 @@
-#ifndef __BTC_DEFS_H__
-#define __BTC_DEFS_H__
+#pragma once
 
 #include "basic_defs.h"
 #include "hash.h"
@@ -258,4 +257,3 @@ btc_inv_type2str(enum btc_inv_type type)
 }
 
 
-#endif /* __BTC_DEFS_H__ */

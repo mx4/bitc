@@ -1,5 +1,4 @@
-#ifndef __SERIALIZE_H__
-#define __SERIALIZE_H__
+#pragma once
 
 #include "btc-message.h"
 
@@ -40,4 +39,3 @@ int serialize_blocklocator(struct buff *buf, const btc_block_locator *bl);
 int serialize_tx(struct buff *buf, const btc_msg_tx *tx);
 
 
-#endif /* __SERIALIZE_H__ */

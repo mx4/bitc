@@ -1,5 +1,4 @@
-#ifndef __BTC_MESSAGE_H__
-#define __BTC_MESSAGE_H__
+#pragma once
 
 #include "basic_defs.h"
 #include "bitc-defs.h"
@@ -58,4 +57,3 @@ uint64 btc_msg_tx_value(const btc_msg_tx *tx);
 void btc_msg_block_free(btc_msg_block *blk);
 void btc_msg_merkleblock_free(btc_msg_merkleblock *blk);
 
-#endif /* __BTC_MESSAGE_H__ */

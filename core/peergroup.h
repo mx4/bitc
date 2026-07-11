@@ -1,5 +1,4 @@
-#ifndef __PEERGROUP_H__
-#define __PEERGROUP_H__
+#pragma once
 
 #include "basic_defs.h"
 #include "bitc-defs.h"
@@ -65,4 +64,3 @@ int peergroup_handle_headers(struct peer *peer, int peerStartingHeight,
 int peergroup_new_tx_broadcast(struct peergroup *pg, const struct buff *buf,
                                mtime_t expiry, const uint256 *hash);
 
-#endif /* __PEERGROUP_H__ */
