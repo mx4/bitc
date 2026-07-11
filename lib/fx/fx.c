@@ -17,13 +17,20 @@
 
 static int verbose;
 
-static const char *url = "http://blockchain.info/ticker";
+/*
+ * blockchain.info now serves exclusively over HTTPS and 301-redirects any
+ * plain HTTP request to https://blockchain.info/ticker. libcurl does not
+ * follow redirects unless CURLOPT_FOLLOWLOCATION is set (see fx_do_update),
+ * so requesting the http:// URL without that option previously handed the
+ * small HTML redirect body to the JSON parser instead of ticker data,
+ * silently leaving the FX panel empty (logged only as 'failed to parse
+ * JSON', with no indication of the actual cause).
+ */
+static const char *url = "https://blockchain.info/ticker";
 
 /*
- * Other usable URLs:
- *      http://data.mtgox.com/api/2/BTCUSD/money/ticker_fast
- *      http://data.mtgox.com/api/2/BTCUSD/money/ticker_fast?pretty
- *      http://blockchain.info/ticker
+ * Other usable URLs (unverified; mtgox no longer exists):
+ *      https://blockchain.info/ticker
  *      http://api.bitcoincharts.com/v1/markets.json
  */
 
@@ -138,13 +145,28 @@ fx_api_parse_json(void)
    int n;
 
    root = cJSON_Parse(buff_base(fx.buf));
-   buff_free(fx.buf);
-   fx.buf = NULL;
 
    if (root == NULL) {
-      log_info(LGPFX" failed to parse JSON\n");
+      /*
+       * Log a snippet of the raw response so a future protocol/schema
+       * change (redirect, HTML error page, altered API shape, etc.) is
+       * diagnosable straight from the log instead of requiring a manual
+       * curl/network investigation to even find out what was returned.
+       */
+      const char *raw = (const char *)buff_base(fx.buf);
+      size_t rawLen = buff_curlen(fx.buf);
+      size_t snipLen = MIN(rawLen, 200);
+
+      log_warn(LGPFX" failed to parse JSON (%zu bytes received): %.*s%s\n",
+              rawLen, (int)snipLen, raw ? raw : "",
+              rawLen > snipLen ? "..." : "");
+      buff_free(fx.buf);
+      fx.buf = NULL;
       return;
    }
+
+   buff_free(fx.buf);
+   fx.buf = NULL;
 
    n = 0;
    for (item = root->child; item != NULL; item = item->next) {
@@ -358,6 +380,13 @@ fx_do_update(void)
    curl_easy_setopt(fx.http_handle, CURLOPT_URL, url);
    curl_easy_setopt(fx.http_handle, CURLOPT_WRITEFUNCTION, fx_api_curl_write_cb);
    curl_easy_setopt(fx.http_handle, CURLOPT_WRITEDATA, NULL);
+   /*
+    * Defensive: follow redirects (bounded) so a future http->https-style
+    * migration doesn't silently hand an HTML redirect body to the JSON
+    * parser again instead of failing loudly or just working.
+    */
+   curl_easy_setopt(fx.http_handle, CURLOPT_FOLLOWLOCATION, 1L);
+   curl_easy_setopt(fx.http_handle, CURLOPT_MAXREDIRS, 5L);
 
    fx.multi_handle = curl_multi_init();
    curl_multi_add_handle(fx.multi_handle, fx.http_handle);
