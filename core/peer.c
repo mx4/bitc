@@ -253,7 +253,14 @@ peer_send_getheaders(struct peer *peer)
    blockstore_get_genesis(btc->blockStore, &genesis);
    blockstore_get_locator_hashes(btc->blockStore, &hashes, &num);
 
-   res = btcmsg_craft_getheaders(num > 0 ? hashes : NULL, num, &genesis, &peer->sendBuf);
+   /*
+    * The block locator is the list of hashes we already have (newest first).
+    * On a fresh store it is empty: we then pass a NULL locator with genesis as
+    * the hashStop so the peer returns the genesis header itself, which seeds
+    * best_chain. Subsequent calls carry a real locator and stream the chain.
+    */
+   res = btcmsg_craft_getheaders(num > 0 ? hashes : NULL, num, &genesis,
+                                 &peer->sendBuf);
    free(hashes);
    if (res) {
       NOT_TESTED();
@@ -444,6 +451,14 @@ peer_destroy(struct circlist_item *li,
    ASSERT(peer->paddr->connected == 1);
    peer->paddr->connected = 0;
    peer->connected = 0;
+
+   /*
+    * If this was the peer driving header download, relinquish that role so the
+    * next peer to connect can take over (see peergroup_download_headers).
+    */
+   if (btc->peerGroup && btc->peerGroup->downloadPeer == peer) {
+      btc->peerGroup->downloadPeer = NULL;
+   }
 
    if (peer_remove_addr(err)) {
       addrbook_remove_entry(btc->book, peer->paddr);

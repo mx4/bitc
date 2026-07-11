@@ -458,6 +458,18 @@ peergroup_download_headers(struct peer *peer,
    ASSERT(btc->state == BITC_STATE_STARTING ||
           btc->state == BITC_STATE_UPDATE_HEADERS);
 
+   /*
+    * Only one peer downloads headers at a time. The first peer to reach here
+    * becomes the download peer; others stay connected but idle. If the download
+    * peer disconnects, peer_destroy() clears this and the next peer to connect
+    * (refill adds one when 'active' drops) takes over.
+    */
+   if (btc->peerGroup->downloadPeer == NULL) {
+      btc->peerGroup->downloadPeer = peer;
+   } else if (btc->peerGroup->downloadPeer != peer) {
+      return 0;
+   }
+
    if (peerStartingHeight > btc->peerGroup->heightTarget) {
       if (btc->peerGroup->numHdrToFetch == 0) {
          btc->peerGroup->numHdrToFetch = peerStartingHeight - blockstore_get_height(bs);
@@ -1131,8 +1143,18 @@ peergroup_handle_headers(struct peer            *peer,
 {
    struct blockstore *bs = btc->blockStore;
    int numOrphans = 0;
+   int numAdded = 0;
    int height;
    int i;
+
+   /*
+    * Ignore headers from any peer other than the designated download peer, so
+    * we never process two header streams into the shared block store at once.
+    */
+   if (btc->peerGroup->downloadPeer != NULL &&
+       btc->peerGroup->downloadPeer != peer) {
+      return 0;
+   }
 
    for (i = 0; i < n; i++) {
       const btc_block_header *hdr = headers + i;
@@ -1150,6 +1172,7 @@ peergroup_handle_headers(struct peer            *peer,
          bitcui_set_status("Block %s orphaned (count = %d)", hashStr, numOrphans);
       }
       if (s) {
+         numAdded++;
          btc->peerGroup->numHdrFetched++;
          if (btc->peerGroup->numHdrFetched % 100000 == 0) {
             Warning(LGPFX" fetched %6d headers out of %d\n",
@@ -1162,13 +1185,26 @@ peergroup_handle_headers(struct peer            *peer,
    peergroup_download_progress();
    height = blockstore_get_height(bs);
 
-   if (height < peerStartingHeight) {
-      ASSERT(btc->state == BITC_STATE_UPDATE_HEADERS);
-      return peer_send_getheaders(peer);
-   } else if (height >= btc->peerGroup->heightTarget) {
-      return peergroup_download_filtered_blocks(peer);
+   /*
+    * Keep the progress target sensible even when peers under-report their
+    * best height in the 'version' handshake (some nodes advertise 0).
+    */
+   if (height > btc->peerGroup->heightTarget) {
+      btc->peerGroup->heightTarget = height;
    }
-   return 0;
+
+   /*
+    * Headers-first sync: a 'headers' message carries up to 2000 entries, so as
+    * long as the peer handed us new headers there are likely more to fetch.
+    * We must NOT rely on the peer's advertised startingHeight to decide when to
+    * stop -- many nodes report 0 -- and instead keep asking until a response
+    * adds nothing new (empty batch == we reached the tip).
+    */
+   if (numAdded > 0 && btc->state == BITC_STATE_UPDATE_HEADERS) {
+      return peer_send_getheaders(peer);
+   }
+
+   return peergroup_download_filtered_blocks(peer);
 }
 
 

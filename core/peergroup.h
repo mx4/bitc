@@ -11,6 +11,12 @@ struct buff;
 struct peergroup {
    struct circlist_item *peer_list;
 
+   /*
+    * Header sync is driven by a single peer at a time; letting every connected
+    * peer download headers in parallel corrupts the shared counters below.
+    */
+   struct peer          *downloadPeer;
+
    uint32                peerSequence;
    uint256               lastFilteredBlockReq;
 
