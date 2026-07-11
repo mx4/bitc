@@ -1052,8 +1052,14 @@ blockstore_get_hash_from_birth(const struct blockstore *bs,
          return;
       }
    }
+   /*
+    * The wallet birth predates every header we have on disk (e.g. a brand-new
+    * headers.dat, or a birth older than the oldest stored header). Start the
+    * scan from genesis rather than crashing.
+    */
+   Log(LGPFX" birth %llu predates stored headers; starting from genesis.\n",
+       (unsigned long long)birth);
    memcpy(hash, &bs->genesis_hash, sizeof *hash);
-   ASSERT(0);
 }
 
 

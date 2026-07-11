@@ -1156,10 +1156,21 @@ wallet_add_key(struct wallet *wallet,
       *btc_addr = b58_pubkey_from_uint160(&pub_key);
    }
 
-   // XXX: fixme
+   /*
+    * A freshly generated key cannot have received funds before it existed, so
+    * time(NULL) is the correct birth: no historical rescan is needed for it.
+    */
    wallet_alloc_key(wallet, privStr, NULL, desc, time(NULL), TRUE);
 
+   /*
+    * privkey and privStr hold raw/encoded private key material: cleanse before
+    * freeing. key_free releases the generated key.
+    */
+   OPENSSL_cleanse(privkey, len);
+   OPENSSL_cleanse(privStr, strlen(privStr));
+   free(privkey);
    free(privStr);
+   key_free(k);
 
    return wallet_save_keys(wallet);
 }
