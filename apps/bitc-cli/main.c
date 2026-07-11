@@ -352,47 +352,6 @@ bitc_sigint_handler(int sig)
 /*
  *---------------------------------------------------------------------
  *
- * bitc_openssl_lock_fun --
- *
- *---------------------------------------------------------------------
- */
-
-static pthread_mutex_t *ssl_mutex_array;
-
-static void
-bitc_openssl_lock_fun(int mode,
-                      int n,
-                      const char *file,
-                      int line)
-{
-   pthread_mutex_t *lock = &ssl_mutex_array[n];
-
-   if (mode & CRYPTO_LOCK) {
-      pthread_mutex_lock(lock);
-   } else {
-      pthread_mutex_unlock(lock);
-   }
-}
-
-
-/*
- *---------------------------------------------------------------------
- *
- * bitc_openssl_thread_id_fun --
- *
- *---------------------------------------------------------------------
- */
-
-static unsigned long
-bitc_openssl_thread_id_fun(void)
-{
-   return (unsigned long)pthread_self();
-}
-
-
-/*
- *---------------------------------------------------------------------
- *
  * bitc_openssl_init --
  *
  *---------------------------------------------------------------------
@@ -401,21 +360,12 @@ bitc_openssl_thread_id_fun(void)
 static void
 bitc_openssl_init(void)
 {
-   const char *sslVersion = SSLeay_version(SSLEAY_VERSION);
-   int i;
-
-   Log(LGPFX" using %s -- %u locks\n", sslVersion, CRYPTO_num_locks());
-
-   SSL_library_init();
-   ssl_mutex_array = OPENSSL_malloc(CRYPTO_num_locks() *
-                                    sizeof *ssl_mutex_array);
-   ASSERT(ssl_mutex_array);
-
-   for (i = 0; i < CRYPTO_num_locks(); i++ ){
-      pthread_mutex_init(&ssl_mutex_array[i], NULL);
-   }
-   CRYPTO_set_id_callback(bitc_openssl_thread_id_fun);
-   CRYPTO_set_locking_callback(bitc_openssl_lock_fun);
+   /*
+    * OpenSSL >= 1.1 initializes itself on first use and is internally
+    * thread-safe, so the explicit SSL_library_init() call and the 1.0.x
+    * locking/thread-id callbacks are no longer needed.
+    */
+   Log(LGPFX" using %s\n", OpenSSL_version(OPENSSL_VERSION));
 }
 
 
@@ -430,14 +380,6 @@ bitc_openssl_init(void)
 static void
 bitc_openssl_exit(void)
 {
-   int i;
-
-   CRYPTO_set_id_callback(NULL);
-   CRYPTO_set_locking_callback(NULL);
-   for (i = 0; i < CRYPTO_num_locks(); i++) {
-      pthread_mutex_destroy(&ssl_mutex_array[i]);
-   }
-   OPENSSL_free(ssl_mutex_array);
 }
 
 

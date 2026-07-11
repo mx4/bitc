@@ -1,10 +1,10 @@
-#ifdef __APPLE__
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
+#include <openssl/evp.h>
 #include <openssl/ec.h>
 #include <openssl/obj_mac.h>
+#include <openssl/bn.h>
 #include <openssl/err.h>
-#include <openssl/ecdsa.h>
+#include <openssl/core_names.h>
+#include <openssl/param_build.h>
 
 #include "util.h"
 #include "key.h"
@@ -12,13 +12,135 @@
 
 #define LGPFX "KEY:"
 
-
+/*
+ * secp256k1 keys, backed by the OpenSSL 3.x EVP_PKEY API for signing and
+ * verification. The low-level EC_KEY / ECDSA_* interface used previously is
+ * deprecated in OpenSSL 3; EC_GROUP/EC_POINT scalar arithmetic (used here only
+ * to derive the compressed public key from the private scalar) is not.
+ */
 struct key {
-   EC_KEY       *key;
-   uint8        *pub_key;
+   EVP_PKEY     *pkey;
+   uint8        *pub_key;    /* cached compressed public key */
    size_t        pub_len;
 };
 
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * key_pubkey_from_priv_bn --
+ *
+ *      Compute the compressed public key (33 bytes, 0x02/0x03 || X) for the
+ *      given private scalar: pub = priv * G on secp256k1. Returns the same
+ *      encoding the old i2o_ECPublicKey(COMPRESSED) path produced, so derived
+ *      addresses are unchanged.
+ *
+ *------------------------------------------------------------------------
+ */
+
+static bool
+key_pubkey_from_priv_bn(const BIGNUM *priv,
+                        uint8       **pub,
+                        size_t       *pub_len)
+{
+   EC_GROUP *grp;
+   EC_POINT *point;
+   BN_CTX *ctx;
+   size_t len;
+   bool ok = 0;
+
+   *pub = NULL;
+   *pub_len = 0;
+
+   grp = EC_GROUP_new_by_curve_name(NID_secp256k1);
+   ctx = BN_CTX_new();
+   if (grp == NULL || ctx == NULL) {
+      goto out;
+   }
+   point = EC_POINT_new(grp);
+   if (point == NULL) {
+      goto out;
+   }
+
+   if (EC_POINT_mul(grp, point, priv, NULL, NULL, ctx) != 1) {
+      Log(LGPFX" EC_POINT_mul failed.\n");
+      goto out_point;
+   }
+
+   len = EC_POINT_point2oct(grp, point, POINT_CONVERSION_COMPRESSED,
+                            NULL, 0, ctx);
+   if (len == 0 || len > 65) {
+      goto out_point;
+   }
+   *pub = safe_malloc(len);
+   if (EC_POINT_point2oct(grp, point, POINT_CONVERSION_COMPRESSED,
+                          *pub, len, ctx) != len) {
+      free(*pub);
+      *pub = NULL;
+      goto out_point;
+   }
+   *pub_len = len;
+   ok = 1;
+
+out_point:
+   EC_POINT_free(point);
+out:
+   BN_CTX_free(ctx);
+   EC_GROUP_free(grp);
+   return ok;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * key_build_pkey --
+ *
+ *      Assemble an EVP_PKEY keypair from the private scalar and its
+ *      (already computed) compressed public key.
+ *
+ *------------------------------------------------------------------------
+ */
+
+static EVP_PKEY *
+key_build_pkey(const BIGNUM *priv,
+               const uint8  *pub,
+               size_t        pub_len)
+{
+   OSSL_PARAM_BLD *bld;
+   OSSL_PARAM *params = NULL;
+   EVP_PKEY_CTX *ctx = NULL;
+   EVP_PKEY *pkey = NULL;
+
+   bld = OSSL_PARAM_BLD_new();
+   if (bld == NULL) {
+      return NULL;
+   }
+   if (OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PKEY_PARAM_GROUP_NAME,
+                                       "secp256k1", 0) != 1 ||
+       OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PRIV_KEY, priv) != 1 ||
+       OSSL_PARAM_BLD_push_octet_string(bld, OSSL_PKEY_PARAM_PUB_KEY,
+                                        pub, pub_len) != 1) {
+      goto out;
+   }
+   params = OSSL_PARAM_BLD_to_param(bld);
+   if (params == NULL) {
+      goto out;
+   }
+   ctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
+   if (ctx == NULL || EVP_PKEY_fromdata_init(ctx) != 1) {
+      goto out;
+   }
+   if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) != 1) {
+      pkey = NULL;
+   }
+
+out:
+   EVP_PKEY_CTX_free(ctx);
+   OSSL_PARAM_free(params);
+   OSSL_PARAM_BLD_free(bld);
+   return pkey;
+}
 
 
 /*
@@ -34,18 +156,19 @@ key_get_privkey(struct key *k,
                 uint8     **priv,
                 size_t     *len)
 {
+   BIGNUM *bn = NULL;
+
    ASSERT(priv);
    *priv = NULL;
    *len = 0;
 
-   if (!EC_KEY_check_key(k->key)) {
+   if (k->pkey == NULL) {
+      return 0;
+   }
+   if (EVP_PKEY_get_bn_param(k->pkey, OSSL_PKEY_PARAM_PRIV_KEY, &bn) != 1) {
       return 0;
    }
 
-   const BIGNUM *bn = EC_KEY_get0_private_key(k->key);
-   if (bn == NULL) {
-      return 0;
-   }
    *len = BN_num_bytes(bn) + 1;
    *priv = safe_malloc(*len);
    BN_bn2bin(bn, *priv);
@@ -55,40 +178,7 @@ key_get_privkey(struct key *k,
     */
    (*priv)[*len - 1] = 1;
 
-   return 1;
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
- * key_get_pubkey_int --
- *
- *------------------------------------------------------------------------
- */
-
-static bool
-key_get_pubkey_int(struct key *k,
-                   uint8     **pub,
-                   size_t    *len)
-{
-   uint8 *data;
-
-   ASSERT(pub);
-   *pub = NULL;
-   *len = 0;
-
-   if (!EC_KEY_check_key(k->key)) {
-      NOT_TESTED();
-      return 0;
-   }
-
-   *len = i2o_ECPublicKey(k->key, 0);
-   ASSERT(*len <= 65);
-   data = safe_malloc(*len);
-   *pub = data;
-   i2o_ECPublicKey(k->key, &data);
-
+   BN_clear_free(bn);
    return 1;
 }
 
@@ -117,51 +207,6 @@ key_get_pubkey(struct key *k,
 /*
  *------------------------------------------------------------------------
  *
- * key_regenerate --
- *
- *------------------------------------------------------------------------
- */
-
-static int
-key_regenerate(struct key *k,
-               const BIGNUM *bn)
-{
-   const EC_GROUP *grp;
-   EC_KEY *key = k->key;
-   EC_POINT *pub_key;
-   BN_CTX *ctx;
-   int res;
-
-   ASSERT(key);
-
-   grp = EC_KEY_get0_group(key);
-   ctx = BN_CTX_new();
-
-   ASSERT(grp);
-   ASSERT(ctx);
-
-   pub_key = EC_POINT_new(grp);
-   ASSERT(pub_key);
-
-   res = EC_POINT_mul(grp, pub_key, bn, NULL, NULL, ctx);
-   ASSERT(res == 1);
-
-   res = EC_KEY_set_private_key(key, bn);
-   ASSERT(res == 1);
-
-   res = EC_KEY_set_public_key(key, pub_key);
-   ASSERT(res == 1);
-
-   EC_POINT_free(pub_key);
-   BN_CTX_free(ctx);
-
-   return EC_KEY_check_key(k->key);
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
  * key_free --
  *
  *------------------------------------------------------------------------
@@ -174,7 +219,7 @@ key_free(struct key *k)
       return;
    }
    free(k->pub_key);
-   EC_KEY_free(k->key);
+   EVP_PKEY_free(k->pkey);
    free(k);
 }
 
@@ -190,32 +235,42 @@ key_free(struct key *k)
 struct key *
 key_generate_new(void)
 {
+   EVP_PKEY_CTX *gctx;
+   EVP_PKEY *pkey = NULL;
+   BIGNUM *priv = NULL;
    struct key *k;
-   int s;
+   OSSL_PARAM params[2];
+
+   params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+                                                "secp256k1", 0);
+   params[1] = OSSL_PARAM_construct_end();
+
+   gctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
+   if (gctx == NULL || EVP_PKEY_keygen_init(gctx) != 1 ||
+       EVP_PKEY_CTX_set_params(gctx, params) != 1 ||
+       EVP_PKEY_generate(gctx, &pkey) != 1) {
+      Log(LGPFX" EC key generation failed.\n");
+      EVP_PKEY_CTX_free(gctx);
+      EVP_PKEY_free(pkey);
+      return NULL;
+   }
+   EVP_PKEY_CTX_free(gctx);
+
+   if (EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, &priv) != 1) {
+      EVP_PKEY_free(pkey);
+      return NULL;
+   }
 
    k = key_alloc();
-
-   s = EC_KEY_generate_key(k->key);
-   if (s == 0) {
-      Log(LGPFX" EC_KEY_generate_key failed.\n");
-      goto exit;
+   k->pkey = pkey;
+   if (!key_pubkey_from_priv_bn(priv, &k->pub_key, &k->pub_len)) {
+      BN_clear_free(priv);
+      key_free(k);
+      return NULL;
    }
-   s = EC_KEY_check_key(k->key);
-   if (s == 0) {
-      Log(LGPFX" EC_KEY_check_key failed.\n");
-      goto exit;
-   }
-
-   EC_KEY_set_conv_form(k->key, POINT_CONVERSION_COMPRESSED);
-
-   ASSERT(k->pub_key == NULL);
-   ASSERT(k->pub_len == 0);
-   key_get_pubkey_int(k, &k->pub_key, &k->pub_len);
+   BN_clear_free(priv);
 
    return k;
-exit:
-   key_free(k);
-   return NULL;
 }
 
 
@@ -232,9 +287,7 @@ key_set_privkey(struct key *k,
                 const void *privkey,
                 size_t len)
 {
-   BIGNUM *res;
    BIGNUM *bn;
-   int s;
 
    /*
     * Cf bitcoin/src/base58.h
@@ -246,22 +299,23 @@ key_set_privkey(struct key *k,
     */
    ASSERT(len == 32 || len == 33);
 
-   bn = BN_new();
-   res = BN_bin2bn(privkey, 32, bn);
-   ASSERT(res);
+   bn = BN_bin2bn(privkey, 32, NULL);
+   ASSERT(bn);
 
-   s = key_regenerate(k, bn);
-   ASSERT(s);
-   ASSERT(EC_KEY_check_key(k->key));
+   if (!key_pubkey_from_priv_bn(bn, &k->pub_key, &k->pub_len)) {
+      BN_clear_free(bn);
+      return 0;
+   }
 
-   EC_KEY_set_conv_form(k->key, POINT_CONVERSION_COMPRESSED);
+   k->pkey = key_build_pkey(bn, k->pub_key, k->pub_len);
+   BN_clear_free(bn);
 
-   ASSERT(k->pub_key == NULL);
-   ASSERT(k->pub_len == 0);
-   key_get_pubkey_int(k, &k->pub_key, &k->pub_len);
-
-   BN_free(bn);
-   ASSERT(EC_KEY_check_key(k->key));
+   if (k->pkey == NULL) {
+      free(k->pub_key);
+      k->pub_key = NULL;
+      k->pub_len = 0;
+      return 0;
+   }
 
    return 1;
 }
@@ -282,9 +336,16 @@ key_verify(struct key *k,
            const void *sig,
            size_t      siglen)
 {
+   EVP_PKEY_CTX *ctx;
    int res;
 
-   res = ECDSA_verify(0, data, datalen, sig, siglen, k->key);
+   ctx = EVP_PKEY_CTX_new_from_pkey(NULL, k->pkey, NULL);
+   if (ctx == NULL || EVP_PKEY_verify_init(ctx) != 1) {
+      EVP_PKEY_CTX_free(ctx);
+      return 0;
+   }
+   res = EVP_PKEY_verify(ctx, sig, siglen, data, datalen);
+   EVP_PKEY_CTX_free(ctx);
 
    return res == 1;
 }
@@ -306,22 +367,34 @@ key_sign(struct key *k,
          size_t     *siglen)
 
 {
-   unsigned int len;
+   EVP_PKEY_CTX *ctx;
+   size_t len = 0;
    uint8 *sig0;
-   int res;
 
    ASSERT(sig);
    ASSERT(siglen);
 
-   len = ECDSA_size(k->key);
-   sig0 = safe_calloc(1, len);
-
-   res = ECDSA_sign(0, data, datalen, sig0, &len, k->key);
-   if (res != 1) {
+   ctx = EVP_PKEY_CTX_new_from_pkey(NULL, k->pkey, NULL);
+   if (ctx == NULL || EVP_PKEY_sign_init(ctx) != 1) {
       NOT_TESTED();
-      free(sig0);
+      EVP_PKEY_CTX_free(ctx);
       return 0;
    }
+
+   if (EVP_PKEY_sign(ctx, NULL, &len, data, datalen) != 1) {
+      NOT_TESTED();
+      EVP_PKEY_CTX_free(ctx);
+      return 0;
+   }
+   sig0 = safe_calloc(1, len);
+   if (EVP_PKEY_sign(ctx, sig0, &len, data, datalen) != 1) {
+      NOT_TESTED();
+      free(sig0);
+      EVP_PKEY_CTX_free(ctx);
+      return 0;
+   }
+   EVP_PKEY_CTX_free(ctx);
+
    *sig = sig0;
    *siglen = len;
 
@@ -343,7 +416,7 @@ key_alloc(void)
    struct key *k;
 
    k = safe_malloc(sizeof *k);
-   k->key = EC_KEY_new_by_curve_name(NID_secp256k1);
+   k->pkey = NULL;
    k->pub_key = NULL;
    k->pub_len = 0;
 
