@@ -47,6 +47,15 @@ static const struct {
    [BTC_MSG_FILTERCLEAR]  = { "filterclear" },
    [BTC_MSG_MERKLEBLOCK]  = { "merkleblock" },
    [BTC_MSG_NOTFOUND]     = { "notfound"    },
+   [BTC_MSG_SENDHEADERS]  = { "sendheaders" },
+   [BTC_MSG_SENDCMPCT]    = { "sendcmpct"   },
+   [BTC_MSG_CMPCTBLOCK]   = { "cmpctblock"  },
+   [BTC_MSG_GETBLOCKTXN]  = { "getblocktxn" },
+   [BTC_MSG_BLOCKTXN]     = { "blocktxn"    },
+   [BTC_MSG_FEEFILTER]    = { "feefilter"   },
+   [BTC_MSG_WTXIDRELAY]   = { "wtxidrelay"  },
+   [BTC_MSG_SENDADDRV2]   = { "sendaddrv2"  },
+   [BTC_MSG_ADDRV2]       = { "addrv2"      },
 };
 
 

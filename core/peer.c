@@ -102,6 +102,7 @@ struct peer {
 
    uint32                  startingHeight;
    uint32                  protversion;
+   uint64                  services;
    char                   *clientStr;
 
    struct peer_addr       *paddr;
@@ -376,9 +377,18 @@ peer_handshake_ok(struct peer *peer)
 {
    int res;
 
-   res = peer_send_filterload(peer);
-   if (res) {
-      return res;
+   /*
+    * BIP37 bloom filtering is disabled by default on modern nodes
+    * (peerbloomfilters=0 since Bitcoin Core 0.19), and such nodes drop peers
+    * that send 'filterload'. Only send it to peers advertising NODE_BLOOM;
+    * everything else is served via headers sync and, going forward, BIP157
+    * compact block filters.
+    */
+   if (peer->services & BTC_SERVICE_NODE_BLOOM) {
+      res = peer_send_filterload(peer);
+      if (res) {
+         return res;
+      }
    }
 
    /* the below should always be true */
@@ -949,6 +959,7 @@ peer_handle_version(struct peer *peer)
 
    peer->protversion = version.version;
    peer->startingHeight = version.startingHeight;
+   peer->services = version.services;
    free(peer->clientStr);
    peer->clientStr = safe_strdup(version.strVersion);
 
@@ -1095,11 +1106,20 @@ peer_receive_cb(struct netasync_socket *sock,
    peergroup_recv_stats_inc(msg);
 
    if (peer->got_version == 0 || peer->got_verack == 0) {
-      res = 1;
+      res = 0;
       if (peer->got_version == 0 && msg == BTC_MSG_VERSION) {
          res = peer_handle_version(peer);
       } else if (peer->got_verack == 0 && msg == BTC_MSG_VERACK) {
          res = peer_handle_verack(peer);
+      } else {
+         /*
+          * Modern peers interleave other messages with the handshake --
+          * e.g. wtxidrelay (BIP339) and sendaddrv2 (BIP155) are sent after
+          * 'version' but before 'verack'. Tolerate anything that is not the
+          * message we are waiting for instead of dropping the connection.
+          */
+         Log(LGPFX" %s: ignoring '%s' during handshake.\n",
+             peer->name, btcmsg_type_to_str(msg));
       }
       if (res != 0) {
          Log(LGPFX" %s: failed msg handling: %s (%s) payloadLength=%zu\n",
@@ -1133,10 +1153,27 @@ peer_receive_cb(struct netasync_socket *sock,
    case BTC_MSG_ALERT:       res = peer_handle_alert(peer);      break;
    case BTC_MSG_NOTFOUND:    res = peer_handle_notfound(peer);   break;
    case BTC_MSG_HEADERS:     res = peer_handle_headers(peer);    break;
+   /*
+    * Benign messages sent by modern peers that we do not need to act on.
+    * Acknowledging them (rather than disconnecting) keeps the connection up.
+    */
+   case BTC_MSG_SENDHEADERS:
+   case BTC_MSG_SENDCMPCT:
+   case BTC_MSG_FEEFILTER:
+   case BTC_MSG_WTXIDRELAY:
+   case BTC_MSG_SENDADDRV2:
+   case BTC_MSG_ADDRV2:
+      res = 0;
+      break;
    default:
-      Warning(LGPFX" %s: got unhandled msg '%s' from %s.\n",
-              peer->name, btcmsg_type_to_str(msg), peer->clientStr);
-      res = 1;
+      /*
+       * Unknown message. The p2p protocol says to ignore these rather than
+       * drop the peer -- doing otherwise breaks against nodes that speak
+       * newer messages than we implement.
+       */
+      Log(LGPFX" %s: ignoring unhandled msg '%s' from %s.\n",
+          peer->name, btcmsg_type_to_str(msg), peer->clientStr);
+      res = 0;
       break;
    }
 next:

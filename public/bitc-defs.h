@@ -10,7 +10,7 @@
 #define BTC_CLIENT_STR_VERSION  "/bitc:"BTC_CLIENT_VERSION
 
 #define ONE_BTC                 (100 * 1000 * 1000.0)
-#define BTC_PROTO_VERSION       60001
+#define BTC_PROTO_VERSION       70016
 #define BTC_NET_MAGIC_MAIN      0xD9B4BEF9
 #define BTC_NET_MAGIC_TESTNET   0x0709110B
 #define BTC_PORT_MAIN           8333
@@ -47,6 +47,16 @@ enum btc_msg_type {
    BTC_MSG_FILTERCLEAR,
    BTC_MSG_MERKLEBLOCK,
    BTC_MSG_NOTFOUND,
+   /* Post-2013 protocol messages (received from modern peers). */
+   BTC_MSG_SENDHEADERS,    /* BIP130 */
+   BTC_MSG_SENDCMPCT,      /* BIP152 */
+   BTC_MSG_CMPCTBLOCK,     /* BIP152 */
+   BTC_MSG_GETBLOCKTXN,    /* BIP152 */
+   BTC_MSG_BLOCKTXN,       /* BIP152 */
+   BTC_MSG_FEEFILTER,      /* BIP133 */
+   BTC_MSG_WTXIDRELAY,     /* BIP339 */
+   BTC_MSG_SENDADDRV2,     /* BIP155 */
+   BTC_MSG_ADDRV2,         /* BIP155 */
    BTC_MSG_MAX,
 };
 
@@ -62,16 +72,27 @@ enum btc_inv_type {
 };
 
 
+/*
+ * Service bits advertised in the 'version' message. See BIP159 for
+ * NODE_NETWORK_LIMITED and BIP157 for NODE_COMPACT_FILTERS.
+ */
 enum btc_services {
-   BTC_SERVICE_NODE_NETWORK = 1,
+   BTC_SERVICE_NODE_NETWORK         = (1 << 0),  /* serves the full block chain    */
+   BTC_SERVICE_NODE_BLOOM           = (1 << 2),  /* BIP37 bloom filtering (legacy) */
+   BTC_SERVICE_NODE_WITNESS         = (1 << 3),  /* serves segwit block/tx data    */
+   BTC_SERVICE_NODE_COMPACT_FILTERS = (1 << 6),  /* BIP157/158 compact filters     */
+   BTC_SERVICE_NODE_NETWORK_LIMITED = (1 << 10), /* serves only the last ~288 blks */
 };
 
 
 enum btc_proto_version {
-   BTC_PROTO_MIN         = 10000,
-   BTC_PROTO_PING        = 60000,
-   BTC_PROTO_FILTERING   = 70001,
-   BTC_PROTO_ADDR_W_TIME = 31402,
+   BTC_PROTO_MIN            = 10000,
+   BTC_PROTO_PING           = 60000,
+   BTC_PROTO_FILTERING      = 70001,
+   BTC_PROTO_ADDR_W_TIME    = 31402,
+   BTC_PROTO_SENDHEADERS    = 70012, /* BIP130 */
+   BTC_PROTO_FEEFILTER      = 70013, /* BIP133 */
+   BTC_PROTO_COMPACT_BLOCKS = 70014, /* BIP152 */
 };
 
 

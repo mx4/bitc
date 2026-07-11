@@ -580,6 +580,15 @@ serialize_version(struct buff *buf,
    res |= serialize_str(buf,    v->strVersion);
    res |= serialize_uint32(buf, v->startingHeight);
 
+   /*
+    * BIP37: peers speaking >= 70001 read a trailing relay flag. We set it
+    * to 0 so peers don't stream unsolicited transactions at us -- as an SPV
+    * client we learn about relevant txs by fetching matched blocks.
+    */
+   if (v->version >= BTC_PROTO_FILTERING) {
+      res |= serialize_uint8(buf, v->relayTx);
+   }
+
    return res;
 }
 

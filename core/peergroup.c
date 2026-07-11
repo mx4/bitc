@@ -25,16 +25,26 @@ struct tx_broadcast {
 };
 
 
+/*
+ * DNS seeds, kept in sync with Bitcoin Core's chainparams.cpp. These return A
+ * records for reachable full nodes to bootstrap the address book.
+ */
 static const char *peer_seeds_main[] = {
    "seed.bitcoin.sipa.be",
    "dnsseed.bluematt.me",
    "dnsseed.bitcoin.dashjr.org",
    "seed.bitcoinstats.com",
-   "bitseed.xf2.org",
+   "seed.bitcoin.jonasschnelli.ch",
+   "seed.btc.petertodd.net",
+   "seed.bitcoin.sprovoost.nl",
+   "dnsseed.emzy.de",
+   "seed.bitcoin.wiz.biz",
 };
 
 static const char *peer_seeds_testnet[] = {
-   "testnet-seed.bitcoin.petertodd.org",
+   "testnet-seed.bitcoin.jonasschnelli.ch",
+   "seed.tbtc.petertodd.net",
+   "seed.testnet.bitcoin.sprovoost.nl",
    "testnet-seed.bluematt.me",
 };
 
