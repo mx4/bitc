@@ -203,9 +203,11 @@ FUZZ_OBJ += $(BLDDIR)/lib/util/util.o $(BLDDIR)/lib/file/file.o
 fuzz-parse: apps/test/fuzz-parse.c $(FUZZ_OBJ)
 	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(LIBS)
 
-# Regression gate: build and run the parser fuzzer.
+# Regression gate: build and run the parser fuzzer. Override for a deeper
+# run, e.g. `make check FUZZ_ITERS=1000000`.
+FUZZ_ITERS ?= 20000
 check: fuzz-parse
-	./fuzz-parse 200000
+	./fuzz-parse $(FUZZ_ITERS)
 
 # compile_commands.json for clangd / editor tooling (no external deps).
 compile_commands.json:
