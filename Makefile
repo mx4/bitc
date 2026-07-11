@@ -34,6 +34,11 @@ endif
 
 CFLAGS += -Ipublic -Ilib/public -Icore/ -Iapps/bitc-cli/ -Iext/src/public
 
+ifeq ($(OS), Darwin)
+BREW := $(shell brew --prefix)
+CFLAGS += -I$(BREW)/include
+endif
+
 ###
 ### LDOPTS
 ###
@@ -62,6 +67,10 @@ LIBS += -lleveldb -lsnappy -lstdc++
 ifeq ($(OS), OpenBSD)
 LIBS += -L/usr/local/lib -lexecinfo
 LIBS := $(subst -lsnappy,,$(LIBS))
+endif
+
+ifeq ($(OS), Darwin)
+LDOPTS += -L$(BREW)/lib
 endif
 
 VGRND  = valgrind --log-file=/tmp/valgrind.log --leak-check=full --error-exitcode=255
