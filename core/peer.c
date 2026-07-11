@@ -1095,6 +1095,14 @@ peer_handle_version(struct peer *peer)
    }
    if (version.services & BTC_SERVICE_NODE_COMPACT_FILTERS) {
       Log(LGPFX" %s: supports BIP157 compact filters.\n", peer->name);
+   } else if (btc->peerGroup && !btc->peerGroup->useBip37) {
+      /*
+       * We're in BIP157 mode and this peer doesn't serve compact filters.
+       * Keep it for header sync, but log that it can't help with tx discovery.
+       */
+      Log(LGPFX" %s: no compact filter support (services=%#llx); "
+          "will use for headers only.\n",
+          peer->name, (unsigned long long)version.services);
    }
    if (version.version < BTC_PROTO_FILTERING) {
       Log(LGPFX" %s: client '%s' does not support filtering.\n",

@@ -198,8 +198,8 @@ bit_reader_read_bits(struct bit_reader *br, int n)
 
 /*
  * Read a Golomb-Rice encoded value with parameter P.
- * Quotient is unary (count of zero bits before a one bit).
- * Remainder is P bits.
+ * Per BIP158: quotient is unary (q 1-bits followed by a 0-bit),
+ * remainder is P bits big-endian.
  * Returns the decoded value, or -1 on exhaustion.
  */
 static int64
@@ -209,13 +209,13 @@ bit_reader_read_gr(struct bit_reader *br, int P)
    int64 remainder;
    int bit;
 
-   /* Read quotient: count zero bits until a one bit. */
+   /* Read quotient: count 1-bits until a 0-bit (BIP158 unary). */
    for (;;) {
       bit = bit_reader_read_bit(br);
       if (bit < 0) {
          return -1;
       }
-      if (bit == 1) {
+      if (bit == 0) {
          break;
       }
       quotient++;
