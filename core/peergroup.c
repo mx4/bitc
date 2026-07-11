@@ -544,6 +544,17 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    peergroup_download_progress();
 
    /*
+    * One response for the current getcfilters batch has now been consumed,
+    * regardless of what we do with it below (match, no match, or an early
+    * skip). Decrement here, once, unconditionally, so every code path below
+    * -- including the 'match' path, which used to return early before ever
+    * reaching the batch-refill logic -- is covered by the same bookkeeping.
+    */
+   if (pg->cfBatchRemaining > 0) {
+      pg->cfBatchRemaining--;
+   }
+
+   /*
     * --stop-after-height: once the scan passes the given height, stop
     * requesting new cfilters. But defer the actual stop until any matched
     * full blocks still in flight have been received and processed, so we
@@ -570,22 +581,22 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    if (numScripts == 0) {
       log_info(LGPFX" BIP157: no wallet scripts to match; skipping cfilter at height %d.\n",
           blockHeight);
-      return 0;
-   }
+      match = 0;
+   } else {
+      match = gcs_filter_match_any(cf->filterData, cf->numBytes,
+                                   &blockHash,
+                                   (const uint8 * const *)scripts,
+                                   scriptLens, numScripts);
 
-   match = gcs_filter_match_any(cf->filterData, cf->numBytes,
-                                &blockHash,
-                                (const uint8 * const *)scripts,
-                                scriptLens, numScripts);
-
-   /* Free the scripts. */
-   {
-      size_t i;
-      for (i = 0; i < numScripts; i++) {
-         free(scripts[i]);
+      /* Free the scripts. */
+      {
+         size_t i;
+         for (i = 0; i < numScripts; i++) {
+            free(scripts[i]);
+         }
+         free(scripts);
+         free(scriptLens);
       }
-      free(scripts);
-      free(scriptLens);
    }
 
    if (match) {
@@ -593,13 +604,15 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
           blockHeight);
       pg->numFetched++;
       peergroup_add_pending_block(&blockHash, peer);
-      return peer_send_getdata(peer, INV_TYPE_MSG_BLOCK, &blockHash, 1);
-   }
-
-   /*
-    * No match: advance the lastblk pointer if this block is next in chain.
-    */
-   {
+      res = peer_send_getdata(peer, INV_TYPE_MSG_BLOCK, &blockHash, 1);
+      if (res) {
+         return res;
+      }
+   } else {
+      /*
+       * No match: advance the lastblk pointer if this block is next in
+       * chain.
+       */
       uint256 lastTxdb;
       peergroup_get_lastblk(pg, &lastTxdb);
       if (btc->state == BITC_STATE_UPDATE_TXDB &&
@@ -611,7 +624,7 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    /*
     * If we've processed all cfilters and caught up to the tip, we're done.
     */
-   if (pg->cfScanHeight > pg->cfTipHeight) {
+   if (pg->cfScanHeight > pg->cfTipHeight && pg->cfBatchRemaining == 0) {
       uint256 best_hash;
       uint256 lastTxdb;
       blockstore_get_best_hash(bs, &best_hash);
@@ -623,9 +636,13 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    }
 
    /*
-    * Request the next batch of cfilters if the current batch is drained.
+    * Request the next batch of cfilters only once the current one has been
+    * fully drained (peergroup_request_cfilters itself also guards on
+    * cfBatchRemaining, so this check is belt-and-suspenders, but keeping it
+    * here avoids even making the call -- and its log line -- on every one
+    * of the up-to-1000 individual cfilter responses in a batch).
     */
-   if (pg->cfScanHeight <= pg->cfTipHeight) {
+   if (pg->cfBatchRemaining == 0 && pg->cfScanHeight <= pg->cfTipHeight) {
       return peergroup_request_cfilters(peer);
    }
 
@@ -1020,6 +1037,18 @@ peergroup_request_cfilters(struct peer *peer)
       return 0;
    }
 
+   /*
+    * Do not send a new getcfilters batch while a previous one still has
+    * outstanding responses: a single getcfilters causes the peer to stream
+    * back one cfilter per height, not one combined reply, so calling this
+    * again before that stream finishes would desync cfScanHeight far ahead
+    * of what has actually been verified (see the comment on
+    * cfBatchRemaining in peergroup.h).
+    */
+   if (pg->cfBatchRemaining > 0) {
+      return 0;
+   }
+
    batchEnd = MIN(pg->cfScanHeight + CFILTER_BATCH - 1, pg->cfTipHeight);
 
    /*
@@ -1044,6 +1073,7 @@ peergroup_request_cfilters(struct peer *peer)
    log_info(LGPFX" BIP157: requested cfilters for heights %d..%d\n",
        pg->cfScanHeight, batchEnd);
 
+   pg->cfBatchRemaining = batchEnd - pg->cfScanHeight + 1;
    pg->cfScanHeight = batchEnd + 1;
    pg->lastFilteredBlockReq = stopHash;
 
@@ -2023,6 +2053,7 @@ peergroup_init(struct config *config,
    pg->cfScanHeight = -1;
    pg->cfTipHeight   = -1;
    pg->cfVerified     = 0;
+   pg->cfBatchRemaining = 0;
    pg->cfhdrStartHeight = -1;
    pg->cfhdrTipHeight   = -1;
    uint256_zero_out(&pg->cfhdrPrevHeader);

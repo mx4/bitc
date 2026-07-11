@@ -64,6 +64,19 @@ struct peergroup {
    bool                  cfStopRequested;   /* --stop-after-height reached */
 
    /*
+    * A single getcfilters(startHeight, stopHash) request causes the peer to
+    * stream back one 'cfilter' message per height in [startHeight, stopHash's
+    * height] -- NOT one combined response. cfBatchRemaining tracks how many
+    * of those individual responses are still outstanding for the batch most
+    * recently requested; the next getcfilters batch must only be requested
+    * once this reaches 0, not after every single cfilter received (doing the
+    * latter multiplies outstanding requests by up to CFILTER_BATCH and
+    * rapidly desyncs cfScanHeight far ahead of what has actually been
+    * verified).
+    */
+   int                   cfBatchRemaining;
+
+   /*
     * Pending matched-block fetches (getdata(MSG_BLOCK) sent, response not
     * yet received). Tracked with a timestamp so a silently unresponsive peer
     * (common for NODE_NETWORK_LIMITED nodes asked for an old block, which
