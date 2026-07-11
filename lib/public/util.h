@@ -6,12 +6,12 @@ void Panic(const char *format, ...) PRINTF_GCC_DECL(1, 2) NORETURN;
 void log_warn(const char *format, ...) PRINTF_GCC_DECL(1, 2);
 
 typedef void (LogCB)(const char *ts, const char *str, void *clientData);
-void Log_SetCB(LogCB *logCB, void *clientData);
+void log_set_cb(LogCB *logCB, void *clientData);
 void log_info(const char *format, ...) PRINTF_GCC_DECL(1, 2);
-void Log_SetLevel(int level);
-void Log_Init(const char *filename);
-void Log_Exit(void);
-void Log_Bytes(const char *pfx, const void *data, size_t len);
+void log_set_level(int level);
+void log_init(const char *filename);
+void log_exit(void);
+void log_bytes(const char *pfx, const void *data, size_t len);
 
 mtime_t time_get(void);
 

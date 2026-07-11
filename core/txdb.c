@@ -1239,7 +1239,7 @@ txdb_set_txo(btc_msg_tx *tx,
    uint160 pubkey;
 
    b58_pubkey_to_uint160(btc_addr, &pubkey);
-   Log_Bytes(LGPFX" hash-addr:", &pubkey, sizeof pubkey);
+   log_bytes(LGPFX" hash-addr:", &pubkey, sizeof pubkey);
 
    ASSERT(idx < tx->out_count);
    txo = tx->tx_out + idx;
@@ -1505,7 +1505,7 @@ txdb_craft_tx(struct txdb              *txdb,
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, &txHash);
    log_warn(LGPFX" %s (%zu bytes)\n", hashStr, buff_curlen(buf));
-   Log_Bytes(LGPFX" TX: ", buff_base(buf), buff_curlen(buf));
+   log_bytes(LGPFX" TX: ", buff_base(buf), buff_curlen(buf));
 
    if (bitc_testing) {
       log_warn("TESTING! Not saving/relaying tx.\n");

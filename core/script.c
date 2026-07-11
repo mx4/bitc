@@ -606,7 +606,7 @@ script_sign(struct wallet               *wallet,
    scriptSig = buff_alloc();
    buff_init(&scriptPubKey, txo->scriptPubKey, txo->scriptLength);
 
-   Log_Bytes("scriptPubKey:", txo->scriptPubKey, txo->scriptLength);
+   log_bytes("scriptPubKey:", txo->scriptPubKey, txo->scriptLength);
 
    script_tx_sighash(wallet, &hash, &scriptPubKey, tx, idx, hashType);
 

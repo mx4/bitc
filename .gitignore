@@ -14,3 +14,5 @@ core.*
 log*
 vgcore.*
 *dSYM
+run-test.sh
+probe-peer.sh

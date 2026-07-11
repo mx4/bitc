@@ -189,9 +189,6 @@ test: bitc
 
 all: $(ALLTARGETS)
 
-lldb: apps/test/lldb.c
-	 $(CC) -o ./lldb src/lldb.c -lleveldb
-
 ###
 ### Adversarial parser fuzzer: feeds random/truncated bytes to every
 ### peer-message parser and checks none of them crash. Run: ./fuzz-parse [iters]

@@ -1165,14 +1165,14 @@ int main(int argc, char *argv[])
       usleep(500 * 1000);
    }
 
-   Log_SetLevel(1);
+   log_set_level(1);
    {
       char *login = util_getusername();
       char *logFile;
       logFile = safe_asprintf("/tmp/bitc-%s%s.log",
                               login ? login : "foo",
                               btc->testnet ? "-testnet" : "");
-      Log_Init(logFile);
+      log_init(logFile);
       printf("Logging to %s\n", logFile);
       free(logFile);
       free(login);
@@ -1207,7 +1207,7 @@ int main(int argc, char *argv[])
       wallet_zap_txdb(btc->config);
       peergroup_zap(btc->config);
       log_warn(LGPFX" zap: done.\n");
-      Log_Exit();
+      log_exit();
       return 0;
    }
 
@@ -1313,7 +1313,7 @@ exit:
    }
 
    memset(btc, 0, sizeof *btc);
-   Log_Exit();
+   log_exit();
 
    return res;
 }

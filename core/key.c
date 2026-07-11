@@ -439,7 +439,7 @@ key_get_pubkey_hash160(const struct key *k,
    ASSERT(k->pub_key);
    ASSERT(k->pub_len > 0);
 
-   Log_Bytes(LGPFX" pubkey: ", k->pub_key, k->pub_len);
+   log_bytes(LGPFX" pubkey: ", k->pub_key, k->pub_len);
 
    hash160_calc(k->pub_key, k->pub_len, hash);
 }

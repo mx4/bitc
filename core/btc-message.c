@@ -638,7 +638,6 @@ btcmsg_parse_merkleblock(struct buff          *buf,
       LOG(1, (LGPFX" BLK: cur: %s", str));
       uint256_snprintf_reverse(str, sizeof str, &blk->header.prevBlock);
       LOG(1, (LGPFX" BLK: prv: %s\n", str));
-      //btcmsg_print_header(&blk->header);
    }
    res |= deserialize_uint32(buf, &blk->txCount);
    res |= deserialize_varint(buf, &blk->hashCount);
@@ -667,7 +666,6 @@ btcmsg_parse_merkleblock(struct buff          *buf,
    blk->bit = safe_malloc(blk->bitArraySize);
    res |= deserialize_bytes(buf, blk->bit, blk->bitArraySize);
 
-   //Log_Bytes("BITS:", blk->bit, blk->bitArraySize);
    LOG(0, (LGPFX" txCount=%u hashCount=%llu bitArraySz=%llu\n",
            blk->txCount, blk->hashCount, blk->bitArraySize));
    if (res) {

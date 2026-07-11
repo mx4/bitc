@@ -499,7 +499,7 @@ bitcui_log_cb(const char *ts,
 static void
 bitcui_log_exit(void)
 {
-   Log_SetCB(NULL, NULL);
+   log_set_cb(NULL, NULL);
 }
 
 
@@ -515,7 +515,7 @@ bitcui_log_exit(void)
 static void
 bitcui_log_init(void)
 {
-   Log_SetCB(bitcui_log_cb, NULL);
+   log_set_cb(bitcui_log_cb, NULL);
 }
 
 

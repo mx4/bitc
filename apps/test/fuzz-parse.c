@@ -120,7 +120,7 @@ main(int argc, char **argv)
    uint32 base = 0x1234567;
    long iters, i;
 
-   Log_Init("/tmp/fuzzharness.log");
+   log_init("/tmp/fuzzharness.log");
    btc = calloc(1, sizeof *btc);
    signal(SIGSEGV, crash_handler);
    signal(SIGBUS,  crash_handler);

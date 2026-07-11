@@ -268,7 +268,7 @@ mutex_unlock(struct mutex *lock)
  */
 
 void
-Log_SetCB(LogCB *logCB,
+log_set_cb(LogCB *logCB,
           void *clientData)
 {
    logState.logCB = logCB;
@@ -492,7 +492,7 @@ log_info(const char *format, ...)
  */
 
 void
-Log_Exit(void)
+log_exit(void)
 {
    if (logState.f) {
       mutex_destroy(logState.lock);
@@ -513,7 +513,7 @@ Log_Exit(void)
  */
 
 void
-Log_Init(const char *filename)
+log_init(const char *filename)
 {
    time_t ltime;
 
@@ -548,7 +548,7 @@ Log_Init(const char *filename)
  */
 
 void
-Log_SetLevel(int level)
+log_set_level(int level)
 {
    logState.verboseLog = level;
 }
@@ -1102,7 +1102,7 @@ str_printf_bytes(const char *pfx,
  */
 
 void
-Log_Bytes(const char *pfx,
+log_bytes(const char *pfx,
           const void *data,
           size_t      len)
 {
