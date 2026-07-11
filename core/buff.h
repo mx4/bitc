@@ -250,14 +250,19 @@ buff_copy_from(struct buff *src,
                void *dst,
                size_t len)
 {
+   /*
+    * Reading past the end of the buffer is an error, not something to grow
+    * into: the bytes simply are not there. This is the guard that keeps a
+    * truncated or internally-inconsistent peer message from reading out of
+    * bounds (and previously tripping buff_resize's ASSERT(grow)).
+    */
    if (buff_check_overflow(src, len)) {
-      if (src->grow) {
-         return 1;
-      }
-      buff_resize(src, len);
+      return 1;
    }
-   memcpy(dst, buff_curptr(src), len);
-   src->idx += len;
+   if (len > 0) {
+      memcpy(dst, buff_curptr(src), len);
+      src->idx += len;
+   }
    return 0;
 }
 
