@@ -1197,8 +1197,11 @@ peer_handle_cfcheckpt(struct peer *peer)
    }
    Log(LGPFX" %s: cfcheckpt type=%u numHeaders=%llu\n",
        peer->name, cfc.filterType, (unsigned long long)cfc.numHeaders);
+
+   res = peergroup_handle_cfcheckpt(peer, &cfc);
+
    btc_msg_cfcheckpt_free(&cfc);
-   return 0;
+   return res;
 }
 
 
@@ -1514,6 +1517,52 @@ peer_getinfo(struct circlist_item *item,
    }
 
    return 0;
+}
+
+
+/*
+ *-------------------------------------------------------------------------
+ *
+ * peer_get_services --
+ *
+ *-------------------------------------------------------------------------
+ */
+uint64
+peer_get_services(struct circlist_item *li)
+{
+   struct peer *peer = GET_PEER(li);
+   ASSERT(peer->magic == PEER_MAGIC);
+   return peer->services;
+}
+
+
+/*
+ *-------------------------------------------------------------------------
+ *
+ * peer_is_connected --
+ *
+ *-------------------------------------------------------------------------
+ */
+bool
+peer_is_connected(struct circlist_item *li)
+{
+   struct peer *peer = GET_PEER(li);
+   ASSERT(peer->magic == PEER_MAGIC);
+   return peer->connected && peer->got_verack;
+}
+
+
+/*
+ *-------------------------------------------------------------------------
+ *
+ * peer_from_li --
+ *
+ *-------------------------------------------------------------------------
+ */
+struct peer *
+peer_from_li(struct circlist_item *li)
+{
+   return GET_PEER(li);
 }
 
 

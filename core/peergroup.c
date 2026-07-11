@@ -26,6 +26,7 @@
 /* Forward declarations. */
 static int peergroup_request_cfilters(struct peer *peer);
 static int peergroup_request_cfheaders(struct peer *peer);
+static int peergroup_verify_cfcheckpts(struct peer *peer);
 
 
 struct tx_broadcast {
@@ -792,8 +793,12 @@ peergroup_download_filtered_blocks(struct peer *peer)
    }
 
    /*
-    * BIP157 path: first sync cfheaders, then request cfilters.
+    * BIP157 path: first verify cfcheckpts across peers, then sync cfheaders,
+    * then request cfilters.
     */
+   if (!pg->cfcheckptVerified) {
+      return peergroup_verify_cfcheckpts(peer);
+   }
    if (pg->cfhdrStartHeight <= pg->cfhdrTipHeight) {
       /* cfheaders not yet synced to tip. */
       return peergroup_request_cfheaders(peer);
@@ -862,6 +867,149 @@ peergroup_request_cfilters(struct peer *peer)
 
 
 #define CFHEADER_BATCH 2000  /* max cfheaders per getcfheaders request */
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_verify_cfcheckpts --
+ *
+ *      Send getcfcheckpt to all connected NODE_COMPACT_FILTERS peers.
+ *      The first response becomes the expected set; subsequent responses
+ *      must agree. This is the eclipse/lying-peer defense: a single peer
+ *      cannot trick us into accepting a fake filter header chain.
+ *
+ *------------------------------------------------------------------------
+ */
+static int
+peergroup_verify_cfcheckpts(struct peer *peer)
+{
+   struct blockstore *bs = btc->blockStore;
+   struct peergroup *pg = btc->peerGroup;
+   uint256 tipHash;
+   int nSent = 0;
+   struct circlist_item *li;
+
+   ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
+
+   /*
+    * Get the block tip hash to use as stopHash for the checkpoint request.
+    */
+   blockstore_get_best_hash(bs, &tipHash);
+
+   /*
+    * Send getcfcheckpt to every connected peer that supports compact filters.
+    */
+   CIRCLIST_SCAN(li, pg->peer_list) {
+      if (peer_is_connected(li) &&
+          (peer_get_services(li) & BTC_SERVICE_NODE_COMPACT_FILTERS)) {
+         int res = peer_send_getcfcheckpt(peer_from_li(li),
+                                         BTC_CFILTER_TYPE_BASIC, &tipHash);
+         if (res == 0) {
+            nSent++;
+         }
+      }
+   }
+
+   pg->cfcheckptPeers    = nSent;
+   pg->cfcheckptAgreed   = 0;
+   pg->cfcheckptVerified = 0;
+   free(pg->cfcheckptExpected);
+   pg->cfcheckptExpected = NULL;
+   pg->cfcheckptCount    = 0;
+
+   if (nSent == 0) {
+      Warning(LGPFX" BIP157: no NODE_COMPACT_FILTERS peers for checkpoint "
+              "verification; proceeding with single-peer sync.\n");
+      pg->cfcheckptVerified = 1;
+      return peergroup_request_cfheaders(peer);
+   }
+
+   Log(LGPFX" BIP157: sent getcfcheckpt to %d peer%s; waiting for responses.\n",
+       nSent, nSent > 1 ? "s" : "");
+   return 0;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_handle_cfcheckpt --
+ *
+ *      BIP157: receive a checkpoint response. The first response becomes the
+ *      expected set; subsequent responses must agree. Once at least one peer
+ *      agrees (or we only have one filter peer), proceed to cfheader sync.
+ *
+ *------------------------------------------------------------------------
+ */
+int
+peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc)
+{
+   struct peergroup *pg = btc->peerGroup;
+   bool agree = 1;
+   int i;
+
+   ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
+
+   Log(LGPFX" BIP157: cfcheckpt from %s: %llu headers.\n",
+       peer_name(peer), (unsigned long long)cfc->numHeaders);
+
+   if (pg->cfcheckptExpected == NULL) {
+      /*
+       * First response: store as the expected set.
+       */
+      pg->cfcheckptCount = (int)cfc->numHeaders;
+      pg->cfcheckptExpected = safe_calloc(cfc->numHeaders,
+                                          sizeof *pg->cfcheckptExpected);
+      for (i = 0; i < (int)cfc->numHeaders; i++) {
+         pg->cfcheckptExpected[i] = cfc->filterHeaders[i];
+      }
+      pg->cfcheckptAgreed++;
+      Log(LGPFX" BIP157: first cfcheckpt stored (%d checkpoints).\n",
+          pg->cfcheckptCount);
+   } else {
+      /*
+       * Subsequent response: compare against the expected set.
+       */
+      if ((int)cfc->numHeaders != pg->cfcheckptCount) {
+         Warning(LGPFX" BIP157: cfcheckpt count mismatch: %llu vs %d.\n",
+                 (unsigned long long)cfc->numHeaders, pg->cfcheckptCount);
+         agree = 0;
+      } else {
+         for (i = 0; i < (int)cfc->numHeaders; i++) {
+            if (uint256_issame(&cfc->filterHeaders[i],
+                               &pg->cfcheckptExpected[i]) == 0) {
+               Warning(LGPFX" BIP157: cfcheckpt mismatch at index %d.\n", i);
+               agree = 0;
+               break;
+            }
+         }
+      }
+
+      if (agree) {
+         pg->cfcheckptAgreed++;
+         Log(LGPFX" BIP157: cfcheckpt agrees (%d/%d peers agree).\n",
+             pg->cfcheckptAgreed, pg->cfcheckptPeers);
+      } else {
+         Warning(LGPFX" BIP157: cfcheckpt DISAGREES; dropping peer %s.\n",
+                 peer_name(peer));
+         return 1;
+      }
+   }
+
+   /*
+    * Once at least one peer agrees (or all responses are in and agree),
+    * proceed to cfheader sync.
+    */
+   if (pg->cfcheckptAgreed >= 1 &&
+       pg->cfcheckptAgreed >= pg->cfcheckptPeers) {
+      pg->cfcheckptVerified = 1;
+      Log(LGPFX" BIP157: cfcheckpt verified by %d peer%s; starting cfheader sync.\n",
+          pg->cfcheckptAgreed, pg->cfcheckptAgreed > 1 ? "s" : "");
+      return peergroup_request_cfheaders(peer);
+   }
+
+   return 0;
+}
 
 /*
  *------------------------------------------------------------------------
@@ -1406,6 +1554,11 @@ peergroup_init(struct config *config,
    pg->cfhdrStartHeight = -1;
    pg->cfhdrTipHeight   = -1;
    uint256_zero_out(&pg->cfhdrPrevHeader);
+   pg->cfcheckptExpected = NULL;
+   pg->cfcheckptCount    = 0;
+   pg->cfcheckptPeers    = 0;
+   pg->cfcheckptAgreed   = 0;
+   pg->cfcheckptVerified = 0;
 
    /*
     * Open the compact-filter header store.
@@ -1663,6 +1816,8 @@ peergroup_exit(struct peergroup *pg)
    hashtable_destroy(pg->hash_broadcast);
    cfheaderstore_exit(pg->cfStore);
    pg->cfStore = NULL;
+   free(pg->cfcheckptExpected);
+   pg->cfcheckptExpected = NULL;
    peergroup_print_stats(pg);
    peergroup_destroy_peers();
    free(btc->peerGroup);

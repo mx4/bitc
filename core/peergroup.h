@@ -50,6 +50,18 @@ struct peergroup {
    int                   cfhdrStartHeight;  /* next height to request cfheaders for */
    int                   cfhdrTipHeight;    /* target height for cfheader sync */
    uint256               cfhdrPrevHeader;   /* prevFilterHeader for the next batch */
+
+   /*
+    * Multi-peer cfcheckpt verification (eclipse defense). Before trusting the
+    * cfheader chain from a single peer, we cross-check filter headers at
+    * checkpoint intervals (every 1000 blocks) across all connected
+    * NODE_COMPACT_FILTERS peers. If they disagree, we reject and disconnect.
+    */
+   uint256              *cfcheckptExpected;  /* checkpoints from the first peer */
+   int                   cfcheckptCount;    /* number of checkpoints expected */
+   int                   cfcheckptPeers;     /* number of peers we sent getcfcheckpt to */
+   int                   cfcheckptAgreed;    /* number of peers that agreed */
+   bool                  cfcheckptVerified;  /* true once at least one peer agreed */
    bool                  useBip37;          /* legacy BIP37 fallback (default false) */
 };
 
@@ -71,6 +83,7 @@ int peergroup_handle_handshake_ok(struct peer *peer, int peerStartingHeight);
 int peergroup_handle_merkleblock(struct peer *peer, const btc_msg_merkleblock *blk);
 int peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf);
 int peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh);
+int peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc);
 int peergroup_handle_block(struct peer *peer, const btc_msg_block *blk);
 void peergroup_handle_addr(struct peer *peer, btc_msg_address **addrs,
                           size_t numAddrs);
