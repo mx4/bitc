@@ -1170,6 +1170,7 @@ int main(int argc, char *argv[])
                               login ? login : "foo",
                               btc->testnet ? "-testnet" : "");
       Log_Init(logFile);
+      printf("Logging to %s\n", logFile);
       free(logFile);
       free(login);
    }
