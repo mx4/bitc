@@ -1302,3 +1302,91 @@ wallet_encrypt(struct wallet      *wallet,
 
    return wallet_save_keys(wallet);
 }
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * wallet_get_filter_scripts_cb --
+ *
+ *      Hashtable callback: append a P2PKH scriptPubKey for each wallet key.
+ *
+ *------------------------------------------------------------------------
+ */
+
+struct filter_scripts_ctx {
+   uint8  **scripts;
+   size_t  *lens;
+   size_t   count;
+   size_t   capacity;
+};
+
+static void
+wallet_get_filter_scripts_cb(const void *key,
+                              size_t keyLen,
+                              void *cbData,
+                              void *keyData)
+{
+   struct filter_scripts_ctx *ctx = (struct filter_scripts_ctx *)cbData;
+   struct wallet_key *wkey = (struct wallet_key *)keyData;
+   uint8 *script;
+
+   /*
+    * P2PKH scriptPubKey:
+    *   OP_DUP(76) OP_HASH160(a9) OP_PUSH20(14) <20-byte hash160>
+    *   OP_EQUALVERIFY(88) OP_CHECKSIG(ac)
+    * Total: 25 bytes.
+    */
+   if (ctx->count >= ctx->capacity) {
+      ctx->capacity = ctx->capacity ? ctx->capacity * 2 : 8;
+      ctx->scripts = safe_realloc(ctx->scripts,
+                                  ctx->capacity * sizeof *ctx->scripts);
+      ctx->lens = safe_realloc(ctx->lens,
+                               ctx->capacity * sizeof *ctx->lens);
+   }
+
+   script = safe_malloc(25);
+   script[0]  = 0x76;  /* OP_DUP */
+   script[1]  = 0xa9;  /* OP_HASH160 */
+   script[2]  = 0x14;  /* push 20 bytes */
+   memcpy(script + 3, wkey->pub_key.data, 20);
+   script[23] = 0x88;  /* OP_EQUALVERIFY */
+   script[24] = 0xac;  /* OP_CHECKSIG */
+
+   ctx->scripts[ctx->count] = script;
+   ctx->lens[ctx->count]    = 25;
+   ctx->count++;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * wallet_get_filter_scripts --
+ *
+ *------------------------------------------------------------------------
+ */
+void
+wallet_get_filter_scripts(const struct wallet *wallet,
+                           uint8 ***scripts,
+                           size_t **lens,
+                           size_t *count)
+{
+   struct filter_scripts_ctx ctx = { 0 };
+
+   ASSERT(scripts);
+   ASSERT(lens);
+   ASSERT(count);
+
+   *scripts = NULL;
+   *lens    = NULL;
+   *count   = 0;
+
+   hashtable_for_each(wallet->hash_keys, wallet_get_filter_scripts_cb, &ctx);
+
+   *scripts = ctx.scripts;
+   *lens    = ctx.lens;
+   *count   = ctx.count;
+
+   Log(LGPFX" emitted %zu filter scripts for BIP158 matching.\n", ctx.count);
+}

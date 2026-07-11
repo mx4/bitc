@@ -41,3 +41,14 @@ void wallet_get_bloom_filter_info(const struct wallet *wallet,
                                   uint8 **filter, uint32 *filterSize,
                                   uint32 *numHashFuncs, uint32 *tweak);
 
+/*
+ * BIP158: collect the scriptPubKeys to test against compact block filters.
+ * For each wallet key, emits the P2PKH script:
+ *   OP_DUP OP_HASH160 <20 bytes> OP_EQUALVERIFY OP_CHECKSIG  (25 bytes)
+ *
+ * Caller frees *scripts and each (*scripts)[i], and *lens.
+ */
+void wallet_get_filter_scripts(const struct wallet *wallet,
+                               uint8 ***scripts, size_t **lens,
+                               size_t *count);
+
