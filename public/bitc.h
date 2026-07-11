@@ -58,6 +58,7 @@ struct BITCApp {
    uint16                   socks5_port;
 
    char                    *connectHost;  /* -C: connect only to this peer */
+   bool                     syncAndExit;  /* --sync-and-exit: quit after headers */
 };
 
 extern struct BITCApp *btc;

@@ -542,6 +542,17 @@ peergroup_download_filtered_blocks(struct peer *peer)
               btc->peerGroup->numHdrToFetch > 1 ? "s" : "", s);
       free(s);
    }
+
+   /*
+    * --sync-and-exit: header sync is done, so quit now instead of moving on to
+    * transaction download. Handy for benchmarking `time ./bitc -d ...`.
+    */
+   if (first && btc->syncAndExit) {
+      Warning(LGPFX" header sync complete; exiting (--sync-and-exit).\n");
+      bitc_req_stop();
+      return 0;
+   }
+
    Log(LGPFX" %s -- BITC_STATE_UPDATE_TXDB.\n", __FUNCTION__);
    btc->state = BITC_STATE_UPDATE_TXDB;
    bitcui_set_status("online, fetching tx..");

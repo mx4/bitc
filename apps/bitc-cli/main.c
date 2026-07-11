@@ -298,6 +298,7 @@ bitc_usage(void)
           " -C, --connect    <host[,..]>   connect only to these peers (host or host:port,\n"
           "                                comma-separated); skips DNS seeds/addrbook\n"
           " -d, --daemon                   daemon mode: no-ui\n"
+          "     --sync-and-exit            exit as soon as headers are synced (for timing)\n"
           " -h, --help                     show this help message\n"
           " -e, --encrypt                  encrypt the wallet file\n"
           " -n, --numPeers   <maxPeers>    number of peers to connect to, default is 5\n"
@@ -1118,6 +1119,7 @@ int main(int argc, char *argv[])
       { "config",       required_argument,  0,  'c' },
       { "connect",      required_argument,  0,  'C' },
       { "daemon",       no_argument,        0,  'd' },
+      { "sync-and-exit", no_argument,       0,  'S' },
       { "encrypt",      no_argument,        0,  'e' },
       { "help",         no_argument,        0,  'h' },
       { "numPeers",     required_argument,  0,  'n' },
@@ -1138,6 +1140,7 @@ int main(int argc, char *argv[])
       case 'a': addr_label = optarg;     break;
       case 'c': configPath = optarg;     break;
       case 'C': btc->connectHost = optarg; break;
+      case 'S': btc->syncAndExit = 1;    break;
       case 'd': withui = 0;              break;
       case 'e': encrypt = 1;             break;
       case 'n': maxPeers = atoi(optarg); break;
