@@ -85,12 +85,8 @@ else
 CFLAGS += -O1 -g
 endif
 
-CFLAGS += -Ipublic -Ilib/public -Icore/ -Iapps/bitc-cli/ -Iext/src/public
+CFLAGS += -Ipublic -Ilib/public -Icore/ -Iapps/cli/ -Iext/src/public
 CFLAGS += $(DEP_CFLAGS)
-
-ifeq ($(OS), OpenBSD)
-CFLAGS += -I/usr/local/include
-endif
 
 # leveldb/snappy live under the Homebrew prefix on macOS and ship no .pc file.
 ifeq ($(OS), Darwin)
@@ -119,11 +115,6 @@ endif
 ###
 
 LIBS = $(DEP_LIBS)
-
-ifeq ($(OS), OpenBSD)
-LIBS += -L/usr/local/lib -lexecinfo
-LIBS := $(subst -lsnappy,,$(LIBS))
-endif
 
 ifeq ($(OS), Darwin)
 LDOPTS += -L$(BREW)/lib
@@ -170,10 +161,10 @@ BTC_FILES += lib/ip_info/ip_info.c
 
 BTC_FILES += ext/src/MurmurHash3/MurmurHash3.c
 
-BTC_FILES += apps/bitc-cli/main.c
-BTC_FILES += apps/bitc-cli/ncui.c
-BTC_FILES += apps/bitc-cli/bitc_ui.c
-BTC_FILES += apps/bitc-cli/test.c
+BTC_FILES += apps/cli/main.c
+BTC_FILES += apps/cli/ncui.c
+BTC_FILES += apps/cli/bitc_ui.c
+BTC_FILES += apps/cli/test.c
 
 BTC_FILES := $(sort $(BTC_FILES))
 BTC_OBJ   := $(patsubst %.c,$(BLDDIR)/%.o,$(BTC_FILES))

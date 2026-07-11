@@ -4,7 +4,7 @@
 
 bitc is a *thin* SPV bitcoin client.
 * 100% C code,
-* support for linux, mac, OpenBSD platforms,
+* support for linux, mac platforms,
 * console based: uses ncurses,
 * home grown async network i/o stack,
 * home grown poll loop,
@@ -90,8 +90,8 @@ bitc uses the folder `~/.bitc` to store various items:
 
 |    what              |    where                | avg size |
 |:---------------------|:------------------------|:--------:|
-| block headers        | ~/.bitc/headers.dat     | ~ 20MB   |
-| peer IP addresses    | ~/.bitc/peers.dat       |  ~ 2MB   |
+| block headers        | ~/.bitc/headers.dat     | ~ 75MB   |
+| peer IP addresses    | ~/.bitc/peers.dat       |  ~ 1MB   |
 | transaction database | ~/.bitc/txdb            |  < 1MB   |
 | config file          | ~/.bitc/main.cfg        |  < 1KB   |
 | wallet keys          | ~/.bitc/wallet.cfg      |  < 1KB   |

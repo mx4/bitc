@@ -60,7 +60,7 @@ time ./bitc -d --connect <ip> --sync-and-exit   # clean header-sync benchmark
 
 ## Architecture map
 
-- `apps/bitc-cli/` — CLI entry (`main.c`), ncurses UI (`ncui.c`, `bitc_ui.c`).
+- `apps/cli/` — CLI entry (`main.c`), ncurses UI (`ncui.c`, `bitc_ui.c`).
 - `core/` — the engine: `peer.c`/`peergroup.c` (p2p + peer management),
   `block-store.c` (header chain + checkpoints), `btc-message.c`/`serialize.c`
   (wire protocol), `key.c`/`crypt.c`/`hash.c` (crypto), `wallet.c`, `txdb.c`,

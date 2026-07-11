@@ -6,10 +6,6 @@
 #include <stddef.h>
 #endif
 
-#ifdef __OpenBSD__
-#include <sys/param.h>
-#endif
-
 #define __BASIC_DEFS_H__
 
 typedef unsigned long long uint64;
