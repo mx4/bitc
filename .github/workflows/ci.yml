@@ -14,6 +14,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: install packages
-      run: sudo apt-get install -y libleveldb-dev libcurl4-openssl-dev libssl-dev libncurses-dev libleveldb-dev libsnappy-dev
-    - name: make
+      run: >
+        sudo apt-get update && sudo apt-get install -y
+        pkg-config libleveldb-dev libsnappy-dev libcurl4-openssl-dev
+        libssl-dev libncurses-dev
+    - name: build (debug)
       run: make
+    - name: build (release)
+      run: make clean && make BUILD=release
+    - name: fuzz parsers
+      run: make check

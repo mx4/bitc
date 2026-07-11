@@ -7,47 +7,86 @@ CC = gcc
 else
 CC = clang
 endif
-ASAN = 0
+
+###
+### Build type: BUILD=debug (default) | release | asan
+### ASAN=1 is kept as a backwards-compatible alias for BUILD=asan.
+###
+
+BUILD ?= debug
+ifeq ($(ASAN), 1)
+BUILD := asan
+endif
+
+LDOPTS :=
+
+###
+### Dependency discovery.
+###
+### Use pkg-config when available so keg-only / non-standard prefixes
+### (Homebrew, multiarch lib dirs, ...) are handled without hardcoded paths.
+### leveldb, snappy and ncurses' panel/form companions ship no .pc file, so
+### they remain plain -l flags.
+###
+
+NCURSES  := $(shell pkg-config --exists ncurses 2>/dev/null && echo ncurses || echo ncursesw)
+PKG_MODS := openssl libcurl $(NCURSES)
+
+ifneq ($(shell command -v pkg-config 2>/dev/null),)
+MISSING := $(strip $(foreach m,$(PKG_MODS),\
+             $(if $(shell pkg-config --exists $(m) 2>/dev/null && echo y),,$(m))))
+ifneq ($(MISSING),)
+$(warning pkg-config cannot find: $(MISSING) -- install the matching -dev packages)
+endif
+DEP_CFLAGS := $(shell pkg-config --cflags $(PKG_MODS) 2>/dev/null)
+DEP_LIBS   := $(shell pkg-config --libs   $(PKG_MODS) 2>/dev/null)
+else
+DEP_LIBS   := -lssl -lcrypto -lcurl -lncurses
+endif
+DEP_LIBS += -lpanel -lform -lleveldb -lsnappy -lstdc++ -lpthread -lm
 
 ###
 ### CFLAGS
 ###
 
-CFLAGS  = -O1 -MMD -g
+CFLAGS  = -MMD
 CFLAGS += -Wall
 ifneq ($(ARCH), armv6l)
 CFLAGS += -Wshadow -Wextra
 endif
 CFLAGS += -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers
+CFLAGS += -fno-omit-frame-pointer -fstack-protector
 
-CFLAGS += -fno-omit-frame-pointer
-CFLAGS += -fstack-protector
-ifeq ($(ASAN), 1)
-ifneq ($(OS), Darwin)
-CFLAGS += -fsanitize=address
+ifeq ($(BUILD), release)
+CFLAGS += -O2 -DNDEBUG
+else ifeq ($(BUILD), asan)
+CFLAGS += -O1 -g -fsanitize=address
+LDOPTS += -fsanitize=address
+else
+CFLAGS += -O1 -g
 endif
-endif
+
+CFLAGS += -Ipublic -Ilib/public -Icore/ -Iapps/bitc-cli/ -Iext/src/public
+CFLAGS += $(DEP_CFLAGS)
 
 ifeq ($(OS), OpenBSD)
 CFLAGS += -I/usr/local/include
 endif
 
-CFLAGS += -Ipublic -Ilib/public -Icore/ -Iapps/bitc-cli/ -Iext/src/public
-
+# leveldb/snappy live under the Homebrew prefix on macOS and ship no .pc file.
 ifeq ($(OS), Darwin)
-BREW := $(shell brew --prefix)
+BREW := $(shell brew --prefix 2>/dev/null)
+ifneq ($(BREW),)
 CFLAGS += -I$(BREW)/include
+LDOPTS += -L$(BREW)/lib
+endif
 endif
 
 ###
 ### LDOPTS
 ###
 
-LDOPTS =
 ifneq ($(OS), Darwin)
-ifeq ($(ASAN), 1)
-LDOPTS += -fsanitize=address
-endif
 LDOPTS += -rdynamic
 endif
 
@@ -56,13 +95,11 @@ CFLAGS += -pg
 LDOPTS += -pg
 endif
 
-
 ###
 ### the rest
 ###
 
-LIBS  = -lpthread -lssl -lcrypto -lm -lncurses -lpanel -lform -lcurl
-LIBS += -lleveldb -lsnappy -lstdc++
+LIBS = $(DEP_LIBS)
 
 ifeq ($(OS), OpenBSD)
 LIBS += -L/usr/local/lib -lexecinfo
@@ -166,11 +203,28 @@ FUZZ_OBJ += $(BLDDIR)/lib/util/util.o $(BLDDIR)/lib/file/file.o
 fuzz-parse: apps/test/fuzz-parse.c $(FUZZ_OBJ)
 	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(LIBS)
 
+# Regression gate: build and run the parser fuzzer.
+check: fuzz-parse
+	./fuzz-parse 200000
+
+# compile_commands.json for clangd / editor tooling (no external deps).
+compile_commands.json:
+	@echo '[' > $@; \
+	i=0; n=$(words $(BTC_FILES)); \
+	for f in $(BTC_FILES); do \
+	  i=$$((i+1)); \
+	  printf '  {"directory": "%s", "file": "%s", "command": "%s %s -c %s"}' \
+	    "$(CURDIR)" "$$f" "$(CC)" "$(CFLAGS)" "$$f" >> $@; \
+	  [ $$i -lt $$n ] && echo ',' >> $@ || echo >> $@; \
+	done; \
+	echo ']' >> $@; \
+	echo "wrote $@ ($(words $(BTC_FILES)) entries)"
+
 lines:
 	 find . -name '*.[ch]'|xargs cat|wc -l
 
 clean:
-	rm -f $(ALLTARGETS) fuzz-parse *~ gmon*
+	rm -f $(ALLTARGETS) fuzz-parse compile_commands.json *~ gmon*
 	rm -rf $(BLDDIR)
 
 tags:
@@ -181,5 +235,5 @@ cscope:
 	rm -f cscope*
 	find . -name '*.[ch]' -print | xargs cscope -b -q
 
-.PHONY: clean tags cscope
+.PHONY: all clean tags cscope check compile_commands.json
 
