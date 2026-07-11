@@ -47,6 +47,9 @@ struct peergroup {
    struct cfheaderstore *cfStore;
    int                   cfScanHeight;     /* next height to request cfilters for */
    int                   cfTipHeight;      /* height of the last cfilter we requested */
+   int                   cfhdrStartHeight;  /* next height to request cfheaders for */
+   int                   cfhdrTipHeight;    /* target height for cfheader sync */
+   uint256               cfhdrPrevHeader;   /* prevFilterHeader for the next batch */
    bool                  useBip37;          /* legacy BIP37 fallback (default false) */
 };
 
@@ -67,6 +70,7 @@ void peergroup_queue_peerlist(struct circlist_item *li);
 int peergroup_handle_handshake_ok(struct peer *peer, int peerStartingHeight);
 int peergroup_handle_merkleblock(struct peer *peer, const btc_msg_merkleblock *blk);
 int peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf);
+int peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh);
 int peergroup_handle_block(struct peer *peer, const btc_msg_block *blk);
 void peergroup_handle_addr(struct peer *peer, btc_msg_address **addrs,
                           size_t numAddrs);

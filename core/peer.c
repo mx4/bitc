@@ -357,6 +357,60 @@ peer_send_getcfilters(struct peer *peer,
 /*
  *------------------------------------------------------------------------
  *
+ * peer_send_getcfheaders --
+ *
+ *------------------------------------------------------------------------
+ */
+int
+peer_send_getcfheaders(struct peer *peer,
+                        uint8 filterType,
+                        uint32 startHeight,
+                        const uint256 *stopHash)
+{
+   btc_msg_getcfheaders g;
+   int res;
+
+   g.filterType  = filterType;
+   g.startHeight = startHeight;
+   g.stopHash    = *stopHash;
+
+   res = btcmsg_craft_getcfheaders(&g, &peer->sendBuf);
+   if (res == 0) {
+      res = peer_send_msg(peer, BTC_MSG_GETCFHEADERS);
+   }
+   return res;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peer_send_getcfcheckpt --
+ *
+ *------------------------------------------------------------------------
+ */
+int
+peer_send_getcfcheckpt(struct peer *peer,
+                        uint8 filterType,
+                        const uint256 *stopHash)
+{
+   btc_msg_getcfcheckpt g;
+   int res;
+
+   g.filterType = filterType;
+   g.stopHash   = *stopHash;
+
+   res = btcmsg_craft_getcfcheckpt(&g, &peer->sendBuf);
+   if (res == 0) {
+      res = peer_send_msg(peer, BTC_MSG_GETCFCHECKPT);
+   }
+   return res;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
  * peer_send_mempool --
  *
  *------------------------------------------------------------------------
@@ -1122,8 +1176,11 @@ peer_handle_cfheaders(struct peer *peer)
    }
    Log(LGPFX" %s: cfheaders type=%u numHeaders=%llu\n",
        peer->name, cfh.filterType, (unsigned long long)cfh.numHeaders);
+
+   res = peergroup_handle_cfheaders(peer, &cfh);
+
    btc_msg_cfheaders_free(&cfh);
-   return 0;
+   return res;
 }
 
 

@@ -1,5 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <limits.h>
 #include <arpa/inet.h>
 
 #include "peergroup.h"
@@ -23,6 +25,7 @@
 
 /* Forward declarations. */
 static int peergroup_request_cfilters(struct peer *peer);
+static int peergroup_request_cfheaders(struct peer *peer);
 
 
 struct tx_broadcast {
@@ -466,6 +469,7 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    uint256 blockHash;
    int blockHeight;
    bool match;
+   int res;
 
    ASSERT(btc->state == BITC_STATE_UPDATE_TXDB ||
           btc->state == BITC_STATE_READY);
@@ -478,6 +482,31 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    if (blockHeight < 0) {
       Warning(LGPFX" BIP157: cfilter for unknown block hash; skipping.\n");
       return 0;
+   }
+
+   /*
+    * Verify the filter against the stored filter header chain.
+    * filterHash = hash256(filterData); this must match the stored hash at
+    * this height, and filterHeader = hash256(filterHash || prevFilterHeader)
+    * must match the stored header. This is what makes BIP157 trust-minimized.
+    */
+   if (pg->cfStore) {
+      uint256 storedHash;
+      uint256 computedHash;
+
+      res = cfheaderstore_get_hash(pg->cfStore, blockHeight, &storedHash);
+      if (res) {
+         Warning(LGPFX" BIP157: no stored filter hash at height %d; skipping.\n",
+                 blockHeight);
+         return 0;
+      }
+      hash256_calc(cf->filterData, cf->numBytes, &computedHash);
+      if (uint256_issame(&computedHash, &storedHash) == 0) {
+         Warning(LGPFX" BIP157: cfilter hash mismatch at height %d! "
+                 "Peer may be serving fake filters.\n", blockHeight);
+         return 1;
+      }
+      Log(LGPFX" BIP157: cfilter verified at height %d.\n", blockHeight);
    }
 
    /*
@@ -703,9 +732,39 @@ peergroup_download_filtered_blocks(struct peer *peer)
        * BIP157: initialize the cfilter scan height from the start hash.
        */
       if (!pg->useBip37) {
-         pg->cfScanHeight = blockstore_get_block_height(bs, &startHash);
-         pg->cfTipHeight  = blockstore_get_height(bs);
-         Log(LGPFX" BIP157: cfilter scan from height %d to %d\n",
+         int startHeight = blockstore_get_block_height(bs, &startHash);
+         int tipHeight = blockstore_get_height(bs);
+
+         pg->cfScanHeight  = startHeight;
+         pg->cfTipHeight   = tipHeight;
+
+         /*
+          * Initialize cfheader sync: start from the tip of the stored
+          * cfheader chain (or 0 if empty), up to the block tip.
+          */
+         {
+            int cfTip = -1;
+            if (pg->cfStore) {
+               cfTip = cfheaderstore_get_tip_height(pg->cfStore);
+            }
+            pg->cfhdrStartHeight = cfTip + 1;  /* -1 + 1 = 0 if empty */
+            pg->cfhdrTipHeight   = tipHeight;
+
+            /*
+             * Set prevFilterHeader for the first batch: either the tip of
+             * the stored chain, or the zero hash if starting from scratch.
+             */
+            if (cfTip >= 0 && pg->cfStore) {
+               cfheaderstore_get_header(pg->cfStore, cfTip,
+                                        &pg->cfhdrPrevHeader);
+            } else {
+               uint256_zero_out(&pg->cfhdrPrevHeader);
+            }
+         }
+
+         Log(LGPFX" BIP157: cfheader sync from height %d to %d, "
+             "cfilter scan from %d to %d\n",
+             pg->cfhdrStartHeight, pg->cfhdrTipHeight,
              pg->cfScanHeight, pg->cfTipHeight);
       }
    }
@@ -733,8 +792,12 @@ peergroup_download_filtered_blocks(struct peer *peer)
    }
 
    /*
-    * BIP157 path: request compact filters via getcfilters.
+    * BIP157 path: first sync cfheaders, then request cfilters.
     */
+   if (pg->cfhdrStartHeight <= pg->cfhdrTipHeight) {
+      /* cfheaders not yet synced to tip. */
+      return peergroup_request_cfheaders(peer);
+   }
    return peergroup_request_cfilters(peer);
 }
 
@@ -795,6 +858,161 @@ peergroup_request_cfilters(struct peer *peer)
    pg->lastFilteredBlockReq = stopHash;
 
    return 0;
+}
+
+
+#define CFHEADER_BATCH 2000  /* max cfheaders per getcfheaders request */
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_request_cfheaders --
+ *
+ *      Send a getcfheaders request for the next batch of block heights.
+ *      The peer responds with prevFilterHeader + an array of filter hashes.
+ *
+ *------------------------------------------------------------------------
+ */
+static int
+peergroup_request_cfheaders(struct peer *peer)
+{
+   struct blockstore *bs = btc->blockStore;
+   struct peergroup *pg = btc->peerGroup;
+   uint256 stopHash;
+   int batchEnd;
+   int res;
+
+   ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
+
+   if (pg->cfhdrStartHeight > pg->cfhdrTipHeight) {
+      /* All cfheaders requested; move on to cfilters. */
+      Log(LGPFX" BIP157: cfheaders synced to height %d; requesting cfilters.\n",
+          pg->cfhdrTipHeight);
+      return peergroup_request_cfilters(peer);
+   }
+
+   batchEnd = MIN(pg->cfhdrStartHeight + CFHEADER_BATCH - 1, pg->cfhdrTipHeight);
+
+   /*
+    * Get the block hash at batchEnd to use as stopHash.
+    */
+   res = blockstore_get_block_at_height(bs, batchEnd, &stopHash, NULL);
+   if (res) {
+      Warning(LGPFX" BIP157: cannot get block hash at height %d for cfheaders.\n",
+              batchEnd);
+      return res;
+   }
+
+   res = peer_send_getcfheaders(peer, BTC_CFILTER_TYPE_BASIC,
+                                pg->cfhdrStartHeight, &stopHash);
+   if (res) {
+      return res;
+   }
+
+   Log(LGPFX" BIP157: requested cfheaders for heights %d..%d\n",
+       pg->cfhdrStartHeight, batchEnd);
+
+   pg->lastFilteredBlockReq = stopHash;
+
+   return 0;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_handle_cfheaders --
+ *
+ *      BIP157: receive a batch of filter headers. Verify that each filter
+ *      hash chains onto the stored cfheader chain, then persist.
+ *
+ *------------------------------------------------------------------------
+ */
+int
+peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
+{
+   struct peergroup *pg = btc->peerGroup;
+   uint256 prevHeader;
+   uint256 expectedPrev;
+   uint64 i;
+   int startHeight;
+   int res;
+
+   ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
+
+   /*
+    * The cfheaders message gives us prevFilterHeader and an array of
+    * filterHashes. We compute filterHeader for each as:
+    *   filterHeader = hash256( filterHash || prevFilterHeader )
+    * and chain them: each prev becomes the previous header.
+    */
+
+   /*
+    * Verify prevFilterHeader matches what we expect.
+    */
+   expectedPrev = pg->cfhdrPrevHeader;
+   if (uint256_issame(&cfh->prevFilterHeader, &expectedPrev) == 0) {
+      Warning(LGPFX" BIP157: cfheaders prevFilterHeader mismatch; dropping peer.\n");
+      return 1;
+   }
+
+   /*
+    * Determine the start height for this batch. It's the first height
+    * after the current cfheader tip (or 0 if empty).
+    */
+   if (pg->cfStore) {
+      startHeight = cfheaderstore_get_tip_height(pg->cfStore) + 1;
+   } else {
+      startHeight = 0;
+   }
+
+   prevHeader = cfh->prevFilterHeader;
+
+   /*
+    * Verify and persist each filter header in the batch.
+    */
+   for (i = 0; i < cfh->numHeaders; i++) {
+      uint256 filterHeader;
+      uint256 filterHash;
+
+      filterHash = cfh->filterHashes[i];
+      cfheader_calc(&filterHash, &prevHeader, &filterHeader);
+
+      /*
+       * Persist the filter header and its hash. The store verifies
+       * height continuity (must be tip+1).
+       */
+      res = cfheaderstore_append(pg->cfStore, startHeight + (int)i,
+                                 &filterHeader, &filterHash);
+      if (res) {
+         Warning(LGPFX" BIP157: cfheaderstore_append failed at height %d.\n",
+                 startHeight + (int)i);
+         return res;
+      }
+
+      prevHeader = filterHeader;
+   }
+
+   /*
+    * Update the prev header for the next batch.
+    */
+   pg->cfhdrPrevHeader = prevHeader;
+   pg->cfhdrStartHeight = startHeight + (int)cfh->numHeaders;
+
+   Log(LGPFX" BIP157: stored %llu cfheaders (heights %d..%d).\n",
+       (unsigned long long)cfh->numHeaders,
+       startHeight, startHeight + (int)cfh->numHeaders - 1);
+
+   /*
+    * Request the next batch, or move on to cfilters.
+    */
+   if (pg->cfhdrStartHeight <= pg->cfhdrTipHeight) {
+      return peergroup_request_cfheaders(peer);
+   }
+
+   Log(LGPFX" BIP157: cfheader sync complete to height %d.\n",
+       pg->cfhdrTipHeight);
+   return peergroup_request_cfilters(peer);
 }
 
 
@@ -1171,6 +1389,7 @@ peergroup_init(struct config *config,
 {
    struct peergroup *pg;
    char *hashStr;
+   int res;
 
    Log(LGPFX" maxPeers=%u period=%.1f msec\n",
        maxPeers, periodUsec / 1000.0);
@@ -1184,6 +1403,24 @@ peergroup_init(struct config *config,
    pg->useBip37      = config_getbool(config, FALSE, "network.useBip37");
    pg->cfScanHeight = -1;
    pg->cfTipHeight   = -1;
+   pg->cfhdrStartHeight = -1;
+   pg->cfhdrTipHeight   = -1;
+   uint256_zero_out(&pg->cfhdrPrevHeader);
+
+   /*
+    * Open the compact-filter header store.
+    */
+   {
+      char *dir = bitc_get_directory();
+      char cfhdrPath[PATH_MAX];
+      snprintf(cfhdrPath, sizeof cfhdrPath, "%s/cfheaders.dat", dir);
+      res = cfheaderstore_init(cfhdrPath, &pg->cfStore);
+      if (res) {
+         Warning(LGPFX" failed to open cfheader store '%s'.\n", cfhdrPath);
+         pg->cfStore = NULL;
+      }
+      free(dir);
+   }
 
    memset(pg->lastBlk.data, 0, sizeof(uint256));
    pg->hash_broadcast = hashtable_create();
@@ -1424,6 +1661,8 @@ peergroup_exit(struct peergroup *pg)
 
    hashtable_clear_with_callback(pg->hash_broadcast, peergroup_free_tx_broadcast_cb);
    hashtable_destroy(pg->hash_broadcast);
+   cfheaderstore_exit(pg->cfStore);
+   pg->cfStore = NULL;
    peergroup_print_stats(pg);
    peergroup_destroy_peers();
    free(btc->peerGroup);

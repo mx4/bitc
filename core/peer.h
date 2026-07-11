@@ -25,4 +25,8 @@ int peer_send_getdata(struct peer *peer, enum btc_inv_type type,
                       const uint256 *hash, int numHash);
 int peer_send_getcfilters(struct peer *peer, uint8 filterType,
                           uint32 startHeight, const uint256 *stopHash);
+int peer_send_getcfheaders(struct peer *peer, uint8 filterType,
+                           uint32 startHeight, const uint256 *stopHash);
+int peer_send_getcfcheckpt(struct peer *peer, uint8 filterType,
+                           const uint256 *stopHash);
 
