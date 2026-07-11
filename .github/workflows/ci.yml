@@ -17,7 +17,7 @@ jobs:
       run: >
         sudo apt-get update && sudo apt-get install -y
         pkg-config libleveldb-dev libsnappy-dev libcurl4-openssl-dev
-        libssl-dev libncurses-dev
+        libssl-dev libncurses-dev libcjson-dev
     - name: build (debug)
       run: make
     - name: build (strict warnings)

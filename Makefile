@@ -30,7 +30,7 @@ LDOPTS :=
 ###
 
 NCURSES  := $(shell pkg-config --exists ncurses 2>/dev/null && echo ncurses || echo ncursesw)
-PKG_MODS := openssl libcurl $(NCURSES)
+PKG_MODS := openssl libcurl libcjson $(NCURSES)
 
 ifneq ($(shell command -v pkg-config 2>/dev/null),)
 MISSING := $(strip $(foreach m,$(PKG_MODS),\
@@ -41,7 +41,7 @@ endif
 DEP_CFLAGS := $(shell pkg-config --cflags $(PKG_MODS) 2>/dev/null)
 DEP_LIBS   := $(shell pkg-config --libs   $(PKG_MODS) 2>/dev/null)
 else
-DEP_LIBS   := -lssl -lcrypto -lcurl -lncurses
+DEP_LIBS   := -lssl -lcrypto -lcurl -lcjson -lncurses
 endif
 DEP_LIBS += -lpanel -lform -lleveldb -lsnappy -lstdc++ -lpthread -lm
 
@@ -166,7 +166,6 @@ BTC_FILES += lib/poll/poll.c
 BTC_FILES += lib/netasync/netasync.c
 BTC_FILES += lib/ip_info/ip_info.c
 
-BTC_FILES += ext/src/cJSON/cJSON.c
 BTC_FILES += ext/src/MurmurHash3/MurmurHash3.c
 
 BTC_FILES += apps/bitc-cli/main.c
