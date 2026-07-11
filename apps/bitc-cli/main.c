@@ -298,7 +298,7 @@ bitc_usage(void)
           " -C, --connect    <host[,..]>   connect only to these peers (host or host:port,\n"
           "                                comma-separated); skips DNS seeds/addrbook\n"
           " -d, --daemon                   daemon mode: no-ui\n"
-          "     --sync-and-exit            exit as soon as headers are synced (for timing)\n"
+          " -S, --sync-and-exit            exit as soon as headers are synced (for timing)\n"
           " -h, --help                     show this help message\n"
           " -e, --encrypt                  encrypt the wallet file\n"
           " -n, --numPeers   <maxPeers>    number of peers to connect to, default is 5\n"
@@ -1134,7 +1134,7 @@ int main(int argc, char *argv[])
 
    bitc_signal_install();
 
-   while ((c = getopt_long(argc, argv, "a:c:C:dehn:pt:Tuvz",
+   while ((c = getopt_long(argc, argv, "a:c:C:dehn:pt:STuvz",
                            long_opts, NULL)) != EOF) {
       switch (c) {
       case 'a': addr_label = optarg;     break;
