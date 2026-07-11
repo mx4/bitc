@@ -153,11 +153,24 @@ all: $(ALLTARGETS)
 lldb: apps/test/lldb.c
 	 $(CC) -o ./lldb src/lldb.c -lleveldb
 
+###
+### Adversarial parser fuzzer: feeds random/truncated bytes to every
+### peer-message parser and checks none of them crash. Run: ./fuzz-parse [iters]
+### For a precise report on a crash, rebuild with ASAN=1 and replay:
+###   ./fuzz-parse --hex <bytes-from-the-crash-line>
+###
+FUZZ_OBJ  = $(BLDDIR)/core/btc-message.o $(BLDDIR)/core/serialize.o
+FUZZ_OBJ += $(BLDDIR)/core/hash.o $(BLDDIR)/core/base58.o
+FUZZ_OBJ += $(BLDDIR)/lib/util/util.o $(BLDDIR)/lib/file/file.o
+
+fuzz-parse: apps/test/fuzz-parse.c $(FUZZ_OBJ)
+	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(LIBS)
+
 lines:
 	 find . -name '*.[ch]'|xargs cat|wc -l
 
 clean:
-	rm -f $(ALLTARGETS) *~ gmon*
+	rm -f $(ALLTARGETS) fuzz-parse *~ gmon*
 	rm -rf $(BLDDIR)
 
 tags:
