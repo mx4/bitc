@@ -154,6 +154,7 @@ BTC_FILES += core/serialize.c
 BTC_FILES += core/crypt.c
 BTC_FILES += core/rpc.c
 BTC_FILES += core/hash.c
+BTC_FILES += core/ripemd160.c
 
 BTC_FILES += lib/hashtable/hashtable.c
 BTC_FILES += lib/fx/fx.c

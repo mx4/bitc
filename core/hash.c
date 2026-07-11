@@ -5,9 +5,9 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 #include <openssl/evp.h>
-#include <openssl/ripemd.h>
 
 #include "hash.h"
+#include "ripemd160.h"
 #include "util.h"
 
 
@@ -177,7 +177,7 @@ hash160_calc(const void *buf,
    uint256 h;
 
    sha256_calc(buf, bufLen, &h);
-   RIPEMD160(&h.data[0], sizeof h, digest->data);
+   ripemd160(&h.data[0], sizeof h, digest->data);
 }
 
 
