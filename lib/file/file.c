@@ -1,7 +1,11 @@
 #ifdef linux
+#ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 500
+#endif
 // for O_DIRECT
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #endif
 
 #include <stdlib.h>
