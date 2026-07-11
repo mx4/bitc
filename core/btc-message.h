@@ -57,3 +57,14 @@ uint64 btc_msg_tx_value(const btc_msg_tx *tx);
 void btc_msg_block_free(btc_msg_block *blk);
 void btc_msg_merkleblock_free(btc_msg_merkleblock *blk);
 
+/* BIP157 compact filter messages. */
+int  btcmsg_craft_getcfilters(const btc_msg_getcfilters *g, struct buff **bufOut);
+int  btcmsg_craft_getcfheaders(const btc_msg_getcfheaders *g, struct buff **bufOut);
+int  btcmsg_craft_getcfcheckpt(const btc_msg_getcfcheckpt *g, struct buff **bufOut);
+int  btcmsg_parse_cfilter(struct buff *buf, btc_msg_cfilter *cf);
+int  btcmsg_parse_cfheaders(struct buff *buf, btc_msg_cfheaders *cfh);
+int  btcmsg_parse_cfcheckpt(struct buff *buf, btc_msg_cfcheckpt *cfc);
+void btc_msg_cfilter_free(btc_msg_cfilter *cf);
+void btc_msg_cfheaders_free(btc_msg_cfheaders *cfh);
+void btc_msg_cfcheckpt_free(btc_msg_cfcheckpt *cfc);
+

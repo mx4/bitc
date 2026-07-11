@@ -154,6 +154,8 @@ BTC_FILES += core/serialize.c
 BTC_FILES += core/crypt.c
 BTC_FILES += core/rpc.c
 BTC_FILES += core/hash.c
+BTC_FILES += core/gcs.c
+BTC_FILES += core/cfheader-store.c
 BTC_FILES += core/ripemd160.c
 
 BTC_FILES += lib/hashtable/hashtable.c
@@ -212,11 +214,19 @@ FUZZ_OBJ += $(BLDDIR)/lib/util/util.o $(BLDDIR)/lib/file/file.o
 fuzz-parse: apps/test/fuzz-parse.c $(FUZZ_OBJ)
 	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(LIBS)
 
-# Regression gate: build and run the parser fuzzer. Override for a deeper
-# run, e.g. `make check FUZZ_ITERS=1000000`.
+### GCS / SipHash self-test (BIP158 decoder).
+TEST_GCS_OBJ  = $(BLDDIR)/core/gcs.o $(BLDDIR)/core/hash.o $(BLDDIR)/core/ripemd160.o
+TEST_GCS_OBJ += $(BLDDIR)/lib/util/util.o $(BLDDIR)/lib/file/file.o
+
+test-gcs: apps/test/test-gcs.c $(TEST_GCS_OBJ)
+	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(LIBS)
+
+# Regression gate: build and run the parser fuzzer and GCS tests.
+# Override for a deeper run, e.g. `make check FUZZ_ITERS=1000000`.
 FUZZ_ITERS ?= 20000
-check: fuzz-parse
+check: fuzz-parse test-gcs
 	./fuzz-parse $(FUZZ_ITERS)
+	./test-gcs
 
 # compile_commands.json for clangd / editor tooling (no external deps).
 compile_commands.json:
@@ -235,8 +245,8 @@ lines:
 	 find . -name '*.[ch]'|xargs cat|wc -l
 
 clean:
-	rm -f $(ALLTARGETS) fuzz-parse fuzz-parse.d compile_commands.json *~ gmon*
-	rm -rf fuzz-parse.dSYM $(BLDDIR)
+	rm -f $(ALLTARGETS) fuzz-parse fuzz-parse.d test-gcs test-gcs.d compile_commands.json *~ gmon*
+	rm -rf fuzz-parse.dSYM test-gcs.dSYM $(BLDDIR)
 
 tags:
 	rm -f tags

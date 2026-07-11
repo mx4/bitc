@@ -1052,6 +1052,68 @@ peer_handle_verack(struct peer *peer)
 /*
  *------------------------------------------------------------------------
  *
+ * BIP157 compact filter message handlers (stubs — wiring comes later).
+ *
+ *------------------------------------------------------------------------
+ */
+
+static int
+peer_handle_cfilter(struct peer *peer)
+{
+   btc_msg_cfilter cf;
+   int res;
+
+   res = btcmsg_parse_cfilter(&peer->recvBuf, &cf);
+   if (res) {
+      Warning(LGPFX" %s: failed to parse cfilter.\n", peer->name);
+      return res;
+   }
+   Log(LGPFX" %s: cfilter type=%u numBytes=%llu\n",
+       peer->name, cf.filterType, (unsigned long long)cf.numBytes);
+   btc_msg_cfilter_free(&cf);
+   return 0;
+}
+
+
+static int
+peer_handle_cfheaders(struct peer *peer)
+{
+   btc_msg_cfheaders cfh;
+   int res;
+
+   res = btcmsg_parse_cfheaders(&peer->recvBuf, &cfh);
+   if (res) {
+      Warning(LGPFX" %s: failed to parse cfheaders.\n", peer->name);
+      return res;
+   }
+   Log(LGPFX" %s: cfheaders type=%u numHeaders=%llu\n",
+       peer->name, cfh.filterType, (unsigned long long)cfh.numHeaders);
+   btc_msg_cfheaders_free(&cfh);
+   return 0;
+}
+
+
+static int
+peer_handle_cfcheckpt(struct peer *peer)
+{
+   btc_msg_cfcheckpt cfc;
+   int res;
+
+   res = btcmsg_parse_cfcheckpt(&peer->recvBuf, &cfc);
+   if (res) {
+      Warning(LGPFX" %s: failed to parse cfcheckpt.\n", peer->name);
+      return res;
+   }
+   Log(LGPFX" %s: cfcheckpt type=%u numHeaders=%llu\n",
+       peer->name, cfc.filterType, (unsigned long long)cfc.numHeaders);
+   btc_msg_cfcheckpt_free(&cfc);
+   return 0;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
  * peer_handle_msgheader --
  *
  *------------------------------------------------------------------------
@@ -1188,6 +1250,9 @@ peer_receive_cb(struct netasync_socket *sock,
    case BTC_MSG_ALERT:       res = peer_handle_alert(peer);      break;
    case BTC_MSG_NOTFOUND:    res = peer_handle_notfound(peer);   break;
    case BTC_MSG_HEADERS:     res = peer_handle_headers(peer);    break;
+   case BTC_MSG_CFILTER:    res = peer_handle_cfilter(peer);     break;
+   case BTC_MSG_CFHEADERS:  res = peer_handle_cfheaders(peer);   break;
+   case BTC_MSG_CFCHECKPT:  res = peer_handle_cfcheckpt(peer);   break;
    /*
     * Benign messages sent by modern peers that we do not need to act on.
     * Acknowledging them (rather than disconnecting) keeps the connection up.

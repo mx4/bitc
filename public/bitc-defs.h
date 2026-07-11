@@ -56,6 +56,12 @@ enum btc_msg_type {
    BTC_MSG_WTXIDRELAY,     /* BIP339 */
    BTC_MSG_SENDADDRV2,     /* BIP155 */
    BTC_MSG_ADDRV2,         /* BIP155 */
+   BTC_MSG_GETCFILTERS,    /* BIP157 */
+   BTC_MSG_CFILTER,        /* BIP157 */
+   BTC_MSG_GETCFHEADERS,   /* BIP157 */
+   BTC_MSG_CFHEADERS,      /* BIP157 */
+   BTC_MSG_GETCFCHECKPT,   /* BIP157 */
+   BTC_MSG_CFCHECKPT,       /* BIP157 */
    BTC_MSG_MAX,
 };
 
@@ -92,7 +98,11 @@ enum btc_proto_version {
    BTC_PROTO_SENDHEADERS    = 70012, /* BIP130 */
    BTC_PROTO_FEEFILTER      = 70013, /* BIP133 */
    BTC_PROTO_COMPACT_BLOCKS = 70014, /* BIP152 */
+   BTC_PROTO_CFILTERS       = 70015, /* BIP157 */
 };
+
+/* BIP157 compact filter type. */
+#define BTC_CFILTER_TYPE_BASIC 0x00
 
 
 typedef struct btc_msg_header {
@@ -167,6 +177,48 @@ typedef struct btc_msg_filterload {
    uint32       tweak;
    uint8        flags;
 } btc_msg_filterload;
+
+
+/* BIP157 compact filter messages. */
+
+typedef struct btc_msg_getcfilters {
+   uint8       filterType;
+   uint32      startHeight;
+   uint256     stopHash;
+} btc_msg_getcfilters;
+
+typedef struct btc_msg_cfilter {
+   uint8       filterType;
+   uint256     blockHash;
+   uint64      numBytes;
+   uint8      *filterData;    /* GCS-encoded; caller frees */
+} btc_msg_cfilter;
+
+typedef struct btc_msg_getcfheaders {
+   uint8       filterType;
+   uint32      startHeight;
+   uint256     stopHash;
+} btc_msg_getcfheaders;
+
+typedef struct btc_msg_cfheaders {
+   uint8       filterType;
+   uint256     stopHash;
+   uint256     prevFilterHeader;
+   uint64      numHeaders;
+   uint256    *filterHashes;  /* array of numHeaders; caller frees */
+} btc_msg_cfheaders;
+
+typedef struct btc_msg_getcfcheckpt {
+   uint8       filterType;
+   uint256     stopHash;
+} btc_msg_getcfcheckpt;
+
+typedef struct btc_msg_cfcheckpt {
+   uint8       filterType;
+   uint256     stopHash;
+   uint64      numHeaders;
+   uint256    *filterHeaders;  /* array; caller frees */
+} btc_msg_cfcheckpt;
 
 
 typedef struct btc_block_header {

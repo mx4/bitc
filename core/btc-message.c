@@ -56,6 +56,12 @@ static const struct {
    [BTC_MSG_WTXIDRELAY]   = { "wtxidrelay"  },
    [BTC_MSG_SENDADDRV2]   = { "sendaddrv2"  },
    [BTC_MSG_ADDRV2]       = { "addrv2"      },
+   [BTC_MSG_GETCFILTERS]  = { "getcfilters"  },
+   [BTC_MSG_CFILTER]      = { "cfilter"      },
+   [BTC_MSG_GETCFHEADERS] = { "getcfheaders" },
+   [BTC_MSG_CFHEADERS]    = { "cfheaders"    },
+   [BTC_MSG_GETCFCHECKPT] = { "getcfcheckpt" },
+   [BTC_MSG_CFCHECKPT]    = { "cfcheckpt"    },
 };
 
 
@@ -1557,5 +1563,190 @@ btc_msg_merkleblock_free(btc_msg_merkleblock *blk)
    free(blk->hash);
    free(blk->bit);
    free(blk);
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * BIP157 compact filter messages.
+ *
+ *------------------------------------------------------------------------
+ */
+
+int
+btcmsg_craft_getcfilters(const btc_msg_getcfilters *g,
+                         struct buff **bufOut)
+{
+   struct buff *buf;
+
+   buf = buff_alloc();
+   serialize_uint8(buf,   g->filterType);
+   serialize_uint32(buf,  g->startHeight);
+   serialize_uint256(buf, &g->stopHash);
+
+   btcmsg_craft_msgheader(bufOut, "getcfilters", buf);
+   buff_free(buf);
+   return 0;
+}
+
+
+int
+btcmsg_craft_getcfheaders(const btc_msg_getcfheaders *g,
+                          struct buff **bufOut)
+{
+   struct buff *buf;
+
+   buf = buff_alloc();
+   serialize_uint8(buf,   g->filterType);
+   serialize_uint32(buf,  g->startHeight);
+   serialize_uint256(buf, &g->stopHash);
+
+   btcmsg_craft_msgheader(bufOut, "getcfheaders", buf);
+   buff_free(buf);
+   return 0;
+}
+
+
+int
+btcmsg_craft_getcfcheckpt(const btc_msg_getcfcheckpt *g,
+                          struct buff **bufOut)
+{
+   struct buff *buf;
+
+   buf = buff_alloc();
+   serialize_uint8(buf,   g->filterType);
+   serialize_uint256(buf, &g->stopHash);
+
+   btcmsg_craft_msgheader(bufOut, "getcfcheckpt", buf);
+   buff_free(buf);
+   return 0;
+}
+
+
+int
+btcmsg_parse_cfilter(struct buff *buf, btc_msg_cfilter *cf)
+{
+   int res;
+
+   memset(cf, 0, sizeof *cf);
+
+   res  = deserialize_uint8(buf, &cf->filterType);
+   res |= deserialize_uint256(buf, &cf->blockHash);
+   res |= deserialize_varint(buf, &cf->numBytes);
+   if (res) {
+      return 1;
+   }
+   if (cf->numBytes > 4000000) {
+      Warning(LGPFX" cfilter numBytes=%llu exceeds cap.\n",
+              (unsigned long long)cf->numBytes);
+      return 1;
+   }
+   cf->filterData = safe_malloc(cf->numBytes);
+   res = deserialize_bytes(buf, cf->filterData, cf->numBytes);
+   if (res) {
+      free(cf->filterData);
+      cf->filterData = NULL;
+      return 1;
+   }
+   return 0;
+}
+
+
+int
+btcmsg_parse_cfheaders(struct buff *buf, btc_msg_cfheaders *cfh)
+{
+   int res;
+   uint64 i;
+
+   memset(cfh, 0, sizeof *cfh);
+
+   res  = deserialize_uint8(buf, &cfh->filterType);
+   res |= deserialize_uint256(buf, &cfh->stopHash);
+   res |= deserialize_uint256(buf, &cfh->prevFilterHeader);
+   res |= deserialize_varint(buf, &cfh->numHeaders);
+   if (res) {
+      return 1;
+   }
+   if (cfh->numHeaders > 2000) {
+      Warning(LGPFX" cfheaders numHeaders=%llu exceeds cap.\n",
+              (unsigned long long)cfh->numHeaders);
+      return 1;
+   }
+   cfh->filterHashes = safe_calloc(cfh->numHeaders, sizeof *cfh->filterHashes);
+   for (i = 0; i < cfh->numHeaders; i++) {
+      res = deserialize_uint256(buf, &cfh->filterHashes[i]);
+      if (res) {
+         free(cfh->filterHashes);
+         cfh->filterHashes = NULL;
+         return 1;
+      }
+   }
+   return 0;
+}
+
+
+int
+btcmsg_parse_cfcheckpt(struct buff *buf, btc_msg_cfcheckpt *cfc)
+{
+   int res;
+   uint64 i;
+
+   memset(cfc, 0, sizeof *cfc);
+
+   res  = deserialize_uint8(buf, &cfc->filterType);
+   res |= deserialize_uint256(buf, &cfc->stopHash);
+   res |= deserialize_varint(buf, &cfc->numHeaders);
+   if (res) {
+      return 1;
+   }
+   if (cfc->numHeaders > 100000) {
+      Warning(LGPFX" cfcheckpt numHeaders=%llu exceeds cap.\n",
+              (unsigned long long)cfc->numHeaders);
+      return 1;
+   }
+   cfc->filterHeaders = safe_calloc(cfc->numHeaders, sizeof *cfc->filterHeaders);
+   for (i = 0; i < cfc->numHeaders; i++) {
+      res = deserialize_uint256(buf, &cfc->filterHeaders[i]);
+      if (res) {
+         free(cfc->filterHeaders);
+         cfc->filterHeaders = NULL;
+         return 1;
+      }
+   }
+   return 0;
+}
+
+
+void
+btc_msg_cfilter_free(btc_msg_cfilter *cf)
+{
+   if (cf == NULL) {
+      return;
+   }
+   free(cf->filterData);
+   cf->filterData = NULL;
+}
+
+
+void
+btc_msg_cfheaders_free(btc_msg_cfheaders *cfh)
+{
+   if (cfh == NULL) {
+      return;
+   }
+   free(cfh->filterHashes);
+   cfh->filterHashes = NULL;
+}
+
+
+void
+btc_msg_cfcheckpt_free(btc_msg_cfcheckpt *cfc)
+{
+   if (cfc == NULL) {
+      return;
+   }
+   free(cfc->filterHeaders);
+   cfc->filterHeaders = NULL;
 }
 
