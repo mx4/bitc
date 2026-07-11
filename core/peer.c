@@ -986,10 +986,30 @@ peer_handle_version(struct peer *peer)
               peer->name, peer->clientStr);
    }
 
+   /*
+    * We need peers that serve historical blocks so we can fetch the ones our
+    * filters match. NODE_NETWORK_LIMITED (BIP159) peers only keep the last
+    * ~288 blocks, which is not enough for an initial sync.
+    */
    if ((version.services & BTC_SERVICE_NODE_NETWORK) == 0) {
-      Warning(LGPFX" %s: node does not do: full-block relay (%s).\n",
+      Warning(LGPFX" %s: node does not serve full blocks (services=%#llx, %s).\n",
+              peer->name, (unsigned long long)version.services, peer->clientStr);
+      return 1;
+   }
+   /*
+    * A real full node reports its best block height. A startingHeight of 0 is
+    * the tell-tale of the non-serving "monitoring" nodes that otherwise flood
+    * and dominate the address book (they also refuse getheaders). Reject them:
+    * the handshake-failure path evicts the address from the book so we do not
+    * keep reconnecting to it.
+    */
+   if (version.startingHeight == 0) {
+      Warning(LGPFX" %s: peer advertises height 0 (%s); dropping.\n",
               peer->name, peer->clientStr);
       return 1;
+   }
+   if (version.services & BTC_SERVICE_NODE_COMPACT_FILTERS) {
+      Log(LGPFX" %s: supports BIP157 compact filters.\n", peer->name);
    }
    if (version.version < BTC_PROTO_FILTERING) {
       Log(LGPFX" %s: client '%s' does not support filtering.\n",

@@ -962,10 +962,12 @@ peergroup_seed(void)
       free(addr);
    }
 
-   if (addrbook_get_count(btc->book) >= 200) {
-      return;
-   }
-
+   /*
+    * Always pull in the DNS seeds. The previous "skip if the book already has
+    * >= 200 entries" shortcut meant that once the address book filled up with
+    * junk (e.g. a monitoring-node cluster), it could never recover because the
+    * diverse seed peers were never re-added.
+    */
    if (btc->testnet) {
       n = ARRAYSIZE(peer_seeds_testnet);
       seeds = peer_seeds_testnet;
