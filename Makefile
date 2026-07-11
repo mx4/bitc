@@ -235,8 +235,8 @@ lines:
 	 find . -name '*.[ch]'|xargs cat|wc -l
 
 clean:
-	rm -f $(ALLTARGETS) fuzz-parse compile_commands.json *~ gmon*
-	rm -rf $(BLDDIR)
+	rm -f $(ALLTARGETS) fuzz-parse fuzz-parse.d compile_commands.json *~ gmon*
+	rm -rf fuzz-parse.dSYM $(BLDDIR)
 
 tags:
 	rm -f tags
