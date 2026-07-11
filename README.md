@@ -12,7 +12,7 @@ bitc is a *thin* SPV bitcoin client.
 * supports encrypted wallet,
 * supports connecting via Tor/Socks5,
 * multi-threaded,
-* valgrind clean.
+* clean under AddressSanitizer and UBSan.
 
 **WARNING:** this app is under development and may contain critical bugs.
 

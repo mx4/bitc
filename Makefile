@@ -129,7 +129,6 @@ ifeq ($(OS), Darwin)
 LDOPTS += -L$(BREW)/lib
 endif
 
-VGRND  = valgrind --log-file=/tmp/valgrind.log --leak-check=full --error-exitcode=255
 BLDDIR = bld
 BTC_BIN  = bitc
 ALLTARGETS = bitc
@@ -187,17 +186,8 @@ bitc: $(BTC_OBJ)
 # do not move the following line:
 -include $(BTC_DEPS)
 
-inocuoustest:
-	$(eval VGRND :=)
-
-test: bitc inocuoustest
+test: bitc
 	./bitc -t 0
-
-vg-test: bitc inocuoustest
-	$(VGRND) ./bitc -t 0
-
-vg-run:
-	valgrind --log-file=log --leak-check=full --gen-suppressions=all --suppressions=./valgrind.supp ./bitc
 
 ###
 ###  Common
@@ -255,5 +245,5 @@ cscope:
 	rm -f cscope*
 	find . -name '*.[ch]' -print | xargs cscope -b -q
 
-.PHONY: all clean tags cscope check compile_commands.json
+.PHONY: all clean tags cscope check test compile_commands.json
 
