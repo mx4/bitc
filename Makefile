@@ -55,6 +55,19 @@ ifneq ($(ARCH), armv6l)
 CFLAGS += -Wshadow -Wextra
 endif
 CFLAGS += -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers
+
+# Optional C standard, e.g. STD=c17 (strict ISO) or STD=gnu17 (with extensions).
+ifdef STD
+CFLAGS += -std=$(STD)
+endif
+
+# STRICT=1: a stricter warning set, treated as errors. Useful in CI / pre-commit.
+ifeq ($(STRICT), 1)
+CFLAGS += -Wpointer-arith -Wwrite-strings -Wredundant-decls
+CFLAGS += -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition
+CFLAGS += -Werror
+endif
+
 CFLAGS += -fno-omit-frame-pointer -fstack-protector
 
 ifeq ($(BUILD), release)
