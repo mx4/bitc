@@ -487,7 +487,7 @@ char *
 bitc_get_directory(void)
 {
    char *res;
-#ifdef TARGET_OS_IPHONE
+#if TARGET_OS_IPHONE
    res = safe_asprintf("~/Library/Application Support/");
 #else
    char *home;
