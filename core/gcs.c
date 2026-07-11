@@ -130,11 +130,11 @@ gcs_self_test(void)
 
    got = siphash_2_4(key, data, sizeof data);
    if (got != expected) {
-      Warning(LGPFX" SipHash self-test FAILED: got 0x%llx, expected 0x%llx\n",
+      log_warn(LGPFX" SipHash self-test FAILED: got 0x%llx, expected 0x%llx\n",
               (unsigned long long)got, (unsigned long long)expected);
       return 0;
    }
-   Log(LGPFX" SipHash self-test passed.\n");
+   log_info(LGPFX" SipHash self-test passed.\n");
    return 1;
 }
 
@@ -324,11 +324,11 @@ gcs_filter_match_any(const uint8 *filterData, size_t filterLen,
 
    /* Read N (number of items in the filter) as a CompactSize varint. */
    if (read_compactsize(filterData, filterLen, &pos, &N)) {
-      Warning(LGPFX" truncated filter: cannot read N.\n");
+      log_warn(LGPFX" truncated filter: cannot read N.\n");
       return 0;
    }
    if (N > 10000000) {
-      Warning(LGPFX" filter N=%llu is unreasonably large; rejecting.\n",
+      log_warn(LGPFX" filter N=%llu is unreasonably large; rejecting.\n",
               (unsigned long long)N);
       return 0;
    }

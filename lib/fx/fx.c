@@ -91,13 +91,13 @@ fx_api_parse_json_entry(cJSON           *root,
 
    item = cJSON_GetObjectItem(root, name);
    if (item == NULL) {
-      Log(LGPFX" failed to find entry '%s'.\n", name);
+      log_info(LGPFX" failed to find entry '%s'.\n", name);
       return;
    }
    symbol = cJSON_GetObjectItem(item, "symbol");
    last   = cJSON_GetObjectItem(item, "last");
    if (symbol == NULL || last == NULL) {
-      Log(LGPFX" failed to parse json entry\n");
+      log_info(LGPFX" failed to parse json entry\n");
       return;
    }
 
@@ -142,7 +142,7 @@ fx_api_parse_json(void)
    fx.buf = NULL;
 
    if (root == NULL) {
-      Log(LGPFX" failed to parse JSON\n");
+      log_info(LGPFX" failed to parse JSON\n");
       return;
    }
 
@@ -216,7 +216,7 @@ fx_api_poll_cb(void *clientData)
 
    err = curl_multi_perform(fx.multi_handle, &still_running);
    if (err != CURLM_OK) {
-      Log(LGPFX" curl_multi_perform returned %s (%d)\n",
+      log_info(LGPFX" curl_multi_perform returned %s (%d)\n",
           curl_multi_strerror(err), err);
       return;
    }
@@ -276,7 +276,7 @@ fx_api_register_poll(void)
 
    err = curl_multi_fdset(fx.multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
    if (err != CURLM_OK) {
-      Log(LGPFX" curl_multi_fdset returned %s (%d)\n",
+      log_info(LGPFX" curl_multi_fdset returned %s (%d)\n",
           curl_multi_strerror(err), err);
       return;
    }
@@ -363,7 +363,7 @@ fx_do_update(void)
    curl_multi_add_handle(fx.multi_handle, fx.http_handle);
    err = curl_multi_perform(fx.multi_handle, &still_running);
    if (err != CURLM_OK) {
-      Log(LGPFX" curl_multi_fdset returned %s (%d)\n",
+      log_info(LGPFX" curl_multi_fdset returned %s (%d)\n",
           curl_multi_strerror(err), err);
       return 1;
    }
@@ -403,7 +403,7 @@ fx_init(void)
    fx.fd_rd = -1;
    fx.fd_wr = -1;
 
-   Log(LGPFX" using %s\n", curl_version());
+   log_info(LGPFX" using %s\n", curl_version());
 
    /*
     * Update every 5min by default.

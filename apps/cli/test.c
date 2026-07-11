@@ -42,11 +42,11 @@ bitc_test_one_tx(struct btc_tx_desc *desc)
    desc->fee = 0;
    for (i = 0; i < desc->num_addr; i++) {
       desc->total_value += desc->dst[i].value;
-      Log(LGPFX" -- %.8f BTC to %s\n",
+      log_info(LGPFX" -- %.8f BTC to %s\n",
           desc->dst[i].value / ONE_BTC, desc->dst[i].addr);
    }
 
-   Log(LGPFX" sending %.8f BTC total\n",
+   log_info(LGPFX" sending %.8f BTC total\n",
        desc->total_value / ONE_BTC);
 
    res = wallet_craft_tx(btc->wallet, desc, &tx);
@@ -60,7 +60,7 @@ bitc_test_one_tx(struct btc_tx_desc *desc)
    hash256_calc(buff_base(buf), buff_curlen(buf), &hash);
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, &hash);
-   Log("TX: %s\n", hashStr);
+   log_info("TX: %s\n", hashStr);
 
    ASSERT(res == 0);
    buff_free(buf);

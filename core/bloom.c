@@ -44,7 +44,7 @@ bloom_create(int n,
    ASSERT(f->numHashFuncs <= MAX_HASH_FUNCS);
    f->tweak = 5; /* XXX */
 
-   Log(LGPFX" filterSize=%u numHashFuncs=%u tweak=%u\n",
+   log_info(LGPFX" filterSize=%u numHashFuncs=%u tweak=%u\n",
        f->filterSize, f->numHashFuncs, f->tweak);
 
    return f;

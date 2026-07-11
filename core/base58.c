@@ -166,7 +166,7 @@ base58_decode_check(uint8      *addrtype,
    hash4_calc(data, len - 4, h);
 
    if (memcmp(h, data + len - 4, 4) != 0) {
-      Warning(LGPFX" hash mismatch.\n");
+      log_warn(LGPFX" hash mismatch.\n");
       goto error;
    }
    memset(data + len - 4, 0, 4);
@@ -216,7 +216,7 @@ base58_setvch(BIGNUM *bn,
    res = BN_mpi2bn(buffer, len, bn);
    if (res == NULL) {
       unsigned long int err = ERR_get_error();
-      Warning(LGPFX" BN_mpi2bn failed: %s (%lu)\n", ERR_error_string(err, NULL), err);
+      log_warn(LGPFX" BN_mpi2bn failed: %s (%lu)\n", ERR_error_string(err, NULL), err);
    }
    ASSERT(res);
 }
@@ -430,7 +430,7 @@ b58_privkey_to_bytes(const char *addr,
 
    base58_decode_check(&type, addr, &buf, len);
 
-   Log(LGPFX" -- type=%d, len=%zu\n", type, *len);
+   log_info(LGPFX" -- type=%d, len=%zu\n", type, *len);
 
    if (type == PRIVKEY_ADDRESS && (*len == 32 || (*len == 33 && buf[32] == 1))) {
       *key = buf;

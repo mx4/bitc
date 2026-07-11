@@ -164,7 +164,7 @@ wallet_print_key_cb(const void *key,
    ASSERT(wkey->btc_addr);
 
    ts = print_time_utc(wkey->birth);
-   Log(LGPFX" -- %s -- %s -- %s\n",
+   log_info(LGPFX" -- %s -- %s -- %s\n",
        wkey->btc_addr, ts, wkey->desc ? wkey->desc : "");
    free(ts);
 }
@@ -244,7 +244,7 @@ wallet_verify_hmac(const struct wallet *wallet,
       *encPrivKey = key;
       *encLen = key_len;
    } else {
-      Log(LGPFX" %s failed.\n", __FUNCTION__);
+      log_info(LGPFX" %s failed.\n", __FUNCTION__);
       free(key);
    }
 
@@ -334,7 +334,7 @@ wallet_alloc_key(struct wallet *wallet,
    wkey->spendable = spendable;
 
    if (spendable == 0) {
-      Log(LGPFX" funds on %s are not spendable.\n", wkey->btc_addr);
+      log_info(LGPFX" funds on %s are not spendable.\n", wkey->btc_addr);
    }
 
    s = hashtable_insert(wallet->hash_keys, &pub_key, sizeof pub_key, wkey);
@@ -476,7 +476,7 @@ wallet_save_keys(struct wallet *wallet)
 
    n = hashtable_getnumentries(wallet->hash_keys);
 
-   Log(LGPFX" saving %u key%s in %sencrypted wallet %s.\n",
+   log_info(LGPFX" saving %u key%s in %sencrypted wallet %s.\n",
        n, n > 1 ? "s" : "",
        wallet->pass ? "encrypted" : "NON-",
        wallet->filename);
@@ -492,7 +492,7 @@ wallet_save_keys(struct wallet *wallet)
       res = RAND_bytes(wallet->ckey->salt, sizeof wallet->ckey->salt);
       if (res != 1) {
          res = ERR_get_error();
-         Log(LGPFX" RAND_bytes failed: %d\n", res);
+         log_info(LGPFX" RAND_bytes failed: %d\n", res);
          goto exit;
       }
       str_snprintf_bytes(saltStr, sizeof saltStr, NULL,
@@ -509,13 +509,13 @@ wallet_save_keys(struct wallet *wallet)
    file_rotate(wallet->filename, 1);
    res = file_create(wallet->filename);
    if (res) {
-      Log(LGPFX" failed to create file '%s': %s\n",
+      log_info(LGPFX" failed to create file '%s': %s\n",
           wallet->filename, strerror(res));
       goto exit;
    }
    res = file_chmod(wallet->filename, 0600);
    if (res) {
-      Log(LGPFX" failed to chmod 0600 wallet.dat: %s\n",
+      log_info(LGPFX" failed to chmod 0600 wallet.dat: %s\n",
           strerror(res));
       goto exit;
    }
@@ -550,7 +550,7 @@ wallet_crypt_init(struct wallet *wallet,
       return;
    }
    if (wallet->pass == NULL) {
-      Log(LGPFX" wallet is encrypted. no passphrase given.\n");
+      log_info(LGPFX" wallet is encrypted. no passphrase given.\n");
       return;
    }
 
@@ -601,7 +601,7 @@ wallet_load_keys(struct wallet     *wallet,
    wallet_crypt_init(wallet, saltStr, count);
    free(saltStr);
 
-   Log(LGPFX" %s wallet: %u key%s in file '%s'.\n",
+   log_info(LGPFX" %s wallet: %u key%s in file '%s'.\n",
        *wallet_state == WALLET_PLAIN ? "plain" : "encrypted",
        n, n > 1 ? "s" : "", wallet->filename);
 
@@ -620,7 +620,7 @@ wallet_load_keys(struct wallet     *wallet,
       free(desc);
 
       if (s == 0) {
-         Log(LGPFX" failed to load pub_key #%u\n", i);
+         log_info(LGPFX" failed to load pub_key #%u\n", i);
          *errStr = "failed to alloc key";
          goto exit;
       }
@@ -1034,18 +1034,18 @@ wallet_craft_tx(struct wallet            *wallet,
 
    btc_msg_tx_init(tx);
 
-   Warning(LGPFX" TX: %.8f BTC for '%s' (fee: %.8f BTC -- %.4f%%)\n",
+   log_warn(LGPFX" TX: %.8f BTC for '%s' (fee: %.8f BTC -- %.4f%%)\n",
            desc->total_value / ONE_BTC, desc->label, desc->fee / ONE_BTC,
            100.0 * desc->fee / desc->total_value);
    for (i = 0; i < desc->num_addr; i++) {
       value += desc->dst[i].value;
-      Warning(LGPFX" TX: %.8f BTC to %s\n",
+      log_warn(LGPFX" TX: %.8f BTC to %s\n",
               desc->dst[i].value / ONE_BTC, desc->dst[i].addr);
    }
    ASSERT(value == desc->total_value);
 
    if (value + desc->fee > wallet->balance) {
-      Warning(LGPFX" insufficient funds: %llu vs %llu (%.8f vs %.8f) fee=%.8f\n",
+      log_warn(LGPFX" insufficient funds: %llu vs %llu (%.8f vs %.8f) fee=%.8f\n",
               value, wallet->balance, value / ONE_BTC,
               wallet->balance / ONE_BTC, desc->fee / ONE_BTC);
       return 1;
@@ -1261,17 +1261,17 @@ wallet_verify(struct secure_area *passphrase,
 
    *wlt_state = WALLET_UNKNOWN;
 
-   Log(LGPFX" Verifying wallet encryption state.\n");
+   log_info(LGPFX" Verifying wallet encryption state.\n");
 
    wallet = wallet_open_file(btc->config, passphrase, &errStr, wlt_state);
    res = wallet != NULL;
    if (wallet) {
       wallet_close(wallet);
    } else {
-      Log(LGPFX" failed to open wallet: %s\n", errStr);
+      log_info(LGPFX" failed to open wallet: %s\n", errStr);
    }
 
-   Log(LGPFX" wallet state : %s\n", wallet_state_to_str());
+   log_info(LGPFX" wallet state : %s\n", wallet_state_to_str());
 
    return res;
 }
@@ -1290,10 +1290,10 @@ wallet_encrypt(struct wallet      *wallet,
                struct secure_area *pass)
 {
 
-   Log(LGPFX" encrypting wallet.\n");
+   log_info(LGPFX" encrypting wallet.\n");
 
    if (wallet->pass) {
-      Log(LGPFX" wallet already encrypted.\n");
+      log_info(LGPFX" wallet already encrypted.\n");
    }
 
    ASSERT(pass);
@@ -1388,5 +1388,5 @@ wallet_get_filter_scripts(const struct wallet *wallet,
    *lens    = ctx.lens;
    *count   = ctx.count;
 
-   Log(LGPFX" emitted %zu filter scripts for BIP158 matching.\n", ctx.count);
+   log_info(LGPFX" emitted %zu filter scripts for BIP158 matching.\n", ctx.count);
 }

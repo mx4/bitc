@@ -135,7 +135,7 @@ peer_send_cb(struct netasync_socket *sock,
 
    if (err != 0) {
       NOT_TESTED();
-      Warning(LGPFX" %s: failed to send: %s (%d)\n",
+      log_warn(LGPFX" %s: failed to send: %s (%d)\n",
               peer->name, strerror(err), err);
    }
 }
@@ -197,7 +197,7 @@ peer_send_msg(struct peer *peer,
    peer->sendBuf = NULL;
 
    if (type != BTC_MSG_PING) {
-      Log(LGPFX" %s: %15s -- sending  %-12s: %zu bytes.\n",
+      log_info(LGPFX" %s: %15s -- sending  %-12s: %zu bytes.\n",
           peer->name, peer->clientStr, btcmsg_type_to_str(type),
           len);
    }
@@ -584,7 +584,7 @@ peer_error_cb(struct netasync_socket *sock,
 {
    struct peer *peer = (struct peer *) clientData;
 
-   Log(LGPFX" %s: Error. Closing conn. w/ %20s %s -- %s (%d).\n",
+   log_info(LGPFX" %s: Error. Closing conn. w/ %20s %s -- %s (%d).\n",
        peer->name, peer->hostname,
        peer->clientStr, strerror(err), err);
 
@@ -618,7 +618,7 @@ peer_handle_getaddr(struct peer *peer)
       memcpy(addrs + i, &paddr->addr, sizeof paddr->addr);
    }
 
-   Warning(LGPFX" %s: send %zu addresses to %s\n",
+   log_warn(LGPFX" %s: send %zu addresses to %s\n",
            peer->name, numAddr, peer->hostname);
    return btcmsg_craft_addr(peer->protversion, addrs, numAddr,
                             &peer->sendBuf);
@@ -639,7 +639,7 @@ peer_handle_ping(struct peer *peer)
    uint64 nonce = 0;
    int res;
 
-   Log(LGPFX" %s: %u PING from %s (%s)\n", __FUNCTION__, __LINE__,
+   log_info(LGPFX" %s: %u PING from %s (%s)\n", __FUNCTION__, __LINE__,
        peer->name, peer->clientStr);
 
    res = btcmsg_parse_pingpong(peer->protversion, &peer->recvBuf,
@@ -861,7 +861,7 @@ peer_handle_merkleblock(struct peer *peer)
       uint256_snprintf_reverse(hashStr1, sizeof hashStr1, &blk->header.prevBlock);
       uint256_snprintf_reverse(hashStr0, sizeof hashStr0, &blk->blkHash);
       NOT_TESTED();
-      Log(LGPFX" %s: got %s parent unknown %s\n",
+      log_info(LGPFX" %s: got %s parent unknown %s\n",
           peer->name, hashStr0, hashStr1);
       peer_send_getblocks(peer);
    }
@@ -946,7 +946,7 @@ peer_handle_pong(struct peer *peer)
       return res;
    }
    if (nonce != peer->pingNonce - 1) {
-      Log(LGPFX" %s: received ping nonce %#llx instead of %#llx.\n",
+      log_info(LGPFX" %s: received ping nonce %#llx instead of %#llx.\n",
           peer->name, nonce, peer->pingNonce - 1);
    }
    return 0;
@@ -1019,7 +1019,7 @@ peer_handle_inv(struct peer *peer)
          s = blockstore_is_block_known(btc->blockStore, &inv[i].hash);
          if (s == 0) {
             uint256_snprintf_reverse(hashStr, sizeof hashStr, &inv[i].hash);
-            Log(LGPFX" %s: inv block %s\n", peer->name, hashStr);
+            log_info(LGPFX" %s: inv block %s\n", peer->name, hashStr);
             hash[numHash] = inv[i].hash;
             type[numHash++] = INV_TYPE_MSG_FILTERED_BLOCK;
          }
@@ -1030,7 +1030,7 @@ peer_handle_inv(struct peer *peer)
           * We'll also get them once they find their way in a block.
           */
          uint256_snprintf_reverse(hashStr, sizeof hashStr, &inv[i].hash);
-         Log(LGPFX" %s: matching tx %s\n", peer->name, hashStr);
+         log_info(LGPFX" %s: matching tx %s\n", peer->name, hashStr);
          if (!wallet_has_tx(btc->wallet, &inv[i].hash)) {
             numtx++;
             hash[numHash] = inv[i].hash;
@@ -1049,7 +1049,7 @@ peer_handle_inv(struct peer *peer)
    if (bitc_state_ready()) {
       for (i = 0; i < numHash; i++) {
          uint256_snprintf_reverse(hashStr, sizeof hashStr, hash + i);
-         Log(LGPFX" %s: [%d / %d] requesting %s %s\n",
+         log_info(LGPFX" %s: [%d / %d] requesting %s %s\n",
              peer->name, i, numHash,
              type[i] == INV_TYPE_MSG_FILTERED_BLOCK ? "block" : "tx",
              hashStr);
@@ -1094,7 +1094,7 @@ peer_handle_version(struct peer *peer)
 
    if (strncmp(version.strVersion, "/Satoshi", 8) != 0 &&
        strncmp(version.strVersion, "", 1) != 0) {
-      Warning(LGPFX" %s: unusual client: '%s'\n",
+      log_warn(LGPFX" %s: unusual client: '%s'\n",
               peer->name, peer->clientStr);
    }
 
@@ -1111,7 +1111,7 @@ peer_handle_version(struct peer *peer)
     * refusing the connection here.
     */
    if ((version.services & BTC_SERVICE_NODE_NETWORK) == 0) {
-      Warning(LGPFX" %s: node does not serve full blocks (services=%#llx, %s).\n",
+      log_warn(LGPFX" %s: node does not serve full blocks (services=%#llx, %s).\n",
               peer->name, (unsigned long long)version.services, peer->clientStr);
       return 1;
    }
@@ -1123,23 +1123,23 @@ peer_handle_version(struct peer *peer)
     * keep reconnecting to it.
     */
    if (version.startingHeight == 0) {
-      Warning(LGPFX" %s: peer advertises height 0 (%s); dropping.\n",
+      log_warn(LGPFX" %s: peer advertises height 0 (%s); dropping.\n",
               peer->name, peer->clientStr);
       return 1;
    }
    if (version.services & BTC_SERVICE_NODE_COMPACT_FILTERS) {
-      Log(LGPFX" %s: supports BIP157 compact filters.\n", peer->name);
+      log_info(LGPFX" %s: supports BIP157 compact filters.\n", peer->name);
    } else if (btc->peerGroup && !btc->peerGroup->useBip37) {
       /*
        * We're in BIP157 mode and this peer doesn't serve compact filters.
        * Keep it for header sync, but log that it can't help with tx discovery.
        */
-      Log(LGPFX" %s: no compact filter support (services=%#llx); "
+      log_info(LGPFX" %s: no compact filter support (services=%#llx); "
           "will use for headers only.\n",
           peer->name, (unsigned long long)version.services);
    }
    if (version.version < BTC_PROTO_FILTERING) {
-      Log(LGPFX" %s: client '%s' does not support filtering.\n",
+      log_info(LGPFX" %s: client '%s' does not support filtering.\n",
           peer->name, peer->clientStr);
       return 1;
    }
@@ -1192,10 +1192,10 @@ peer_handle_cfilter(struct peer *peer)
 
    res = btcmsg_parse_cfilter(&peer->recvBuf, &cf);
    if (res) {
-      Warning(LGPFX" %s: failed to parse cfilter.\n", peer->name);
+      log_warn(LGPFX" %s: failed to parse cfilter.\n", peer->name);
       return res;
    }
-   Log(LGPFX" %s: cfilter type=%u numBytes=%llu\n",
+   log_info(LGPFX" %s: cfilter type=%u numBytes=%llu\n",
        peer->name, cf.filterType, (unsigned long long)cf.numBytes);
 
    res = peergroup_handle_cfilter(peer, &cf);
@@ -1213,10 +1213,10 @@ peer_handle_cfheaders(struct peer *peer)
 
    res = btcmsg_parse_cfheaders(&peer->recvBuf, &cfh);
    if (res) {
-      Warning(LGPFX" %s: failed to parse cfheaders.\n", peer->name);
+      log_warn(LGPFX" %s: failed to parse cfheaders.\n", peer->name);
       return res;
    }
-   Log(LGPFX" %s: cfheaders type=%u numHeaders=%llu\n",
+   log_info(LGPFX" %s: cfheaders type=%u numHeaders=%llu\n",
        peer->name, cfh.filterType, (unsigned long long)cfh.numHeaders);
 
    res = peergroup_handle_cfheaders(peer, &cfh);
@@ -1234,10 +1234,10 @@ peer_handle_cfcheckpt(struct peer *peer)
 
    res = btcmsg_parse_cfcheckpt(&peer->recvBuf, &cfc);
    if (res) {
-      Warning(LGPFX" %s: failed to parse cfcheckpt.\n", peer->name);
+      log_warn(LGPFX" %s: failed to parse cfcheckpt.\n", peer->name);
       return res;
    }
-   Log(LGPFX" %s: cfcheckpt type=%u numHeaders=%llu\n",
+   log_info(LGPFX" %s: cfcheckpt type=%u numHeaders=%llu\n",
        peer->name, cfc.filterType, (unsigned long long)cfc.numHeaders);
 
    res = peergroup_handle_cfcheckpt(peer, &cfc);
@@ -1259,7 +1259,7 @@ static int
 peer_handle_msgheader(struct peer *peer)
 {
    if (!btcmsg_header_valid(&peer->msgHdr)) {
-      Warning(LGPFX" %s: invalid msg header -- %s\n",
+      log_warn(LGPFX" %s: invalid msg header -- %s\n",
               peer->name, peer->clientStr);
       return 1;
    }
@@ -1331,7 +1331,7 @@ peer_receive_cb(struct netasync_socket *sock,
    }
 
    if (!btcmsg_payload_valid(&peer->recvBuf, peer->msgHdr.checksum)) {
-      Warning(LGPFX" %s: invalid checksum for '%s'.\n",
+      log_warn(LGPFX" %s: invalid checksum for '%s'.\n",
               peer->name, btcmsg_type_to_str(msg));
       goto exit;
    }
@@ -1351,11 +1351,11 @@ peer_receive_cb(struct netasync_socket *sock,
           * 'version' but before 'verack'. Tolerate anything that is not the
           * message we are waiting for instead of dropping the connection.
           */
-         Log(LGPFX" %s: ignoring '%s' during handshake.\n",
+         log_info(LGPFX" %s: ignoring '%s' during handshake.\n",
              peer->name, btcmsg_type_to_str(msg));
       }
       if (res != 0) {
-         Log(LGPFX" %s: failed msg handling: %s (%s) payloadLength=%zu\n",
+         log_info(LGPFX" %s: failed msg handling: %s (%s) payloadLength=%zu\n",
                  peer->name, btcmsg_type_to_str(msg), peer->clientStr,
                  buff_maxlen(&peer->recvBuf));
          goto exit;
@@ -1365,7 +1365,7 @@ peer_receive_cb(struct netasync_socket *sock,
    if (DOLOG(1) ||
        (msg != BTC_MSG_INV && msg != BTC_MSG_ADDR &&
         msg != BTC_MSG_PING && msg != BTC_MSG_PONG)) {
-      Log(LGPFX" %s: %15s -- received %-12s: %zu bytes.\n",
+      log_info(LGPFX" %s: %15s -- received %-12s: %zu bytes.\n",
           peer->name, peer->clientStr, peer->msgHdr.message,
           buff_maxlen(&peer->recvBuf));
    }
@@ -1407,7 +1407,7 @@ peer_receive_cb(struct netasync_socket *sock,
        * drop the peer -- doing otherwise breaks against nodes that speak
        * newer messages than we implement.
        */
-      Log(LGPFX" %s: ignoring unhandled msg '%s' from %s.\n",
+      log_info(LGPFX" %s: ignoring unhandled msg '%s' from %s.\n",
           peer->name, btcmsg_type_to_str(msg), peer->clientStr);
       res = 0;
       break;
@@ -1417,7 +1417,7 @@ next:
       uint256_zero_out(&peer->last_merkle_block);
    }
    if (res != 0) {
-      Warning(LGPFX" %s: failed msg handling: %s (%s) payloadLength=%zu\n",
+      log_warn(LGPFX" %s: failed msg handling: %s (%s) payloadLength=%zu\n",
               peer->name, btcmsg_type_to_str(msg), peer->clientStr,
               buff_maxlen(&peer->recvBuf));
       goto exit;
@@ -1454,7 +1454,7 @@ peer_connect_cb(struct netasync_socket *sock,
    ASSERT(peer->magic == PEER_MAGIC);
 
    if (err != 0) {
-      Log(LGPFX" %s: %s -- %s (%d).\n",
+      log_info(LGPFX" %s: %s -- %s (%d).\n",
           peer->name, netasync_hostname(sock), strerror(err), err);
       peer_destroy(&peer->item, err);
       return;
@@ -1463,7 +1463,7 @@ peer_connect_cb(struct netasync_socket *sock,
    peer->connected = 1;
    peer->recvMsgHdr = 1;
 
-   Log(LGPFX" %s: connected to %s. sending version msg.\n",
+   log_info(LGPFX" %s: connected to %s. sending version msg.\n",
        peer->name, netasync_hostname(sock));
 
    /*
@@ -1667,7 +1667,7 @@ peer_send_inv(struct circlist_item *item,
    ASSERT(peer->sendBuf == NULL);
 
    if (peer->got_verack == 0) {
-      Log(LGPFX" %s: skipping inv transmit.\n", peer->name);
+      log_info(LGPFX" %s: skipping inv transmit.\n", peer->name);
       return 0;
    }
 
@@ -1694,7 +1694,7 @@ peer_tx_broadcast(struct peer *peer,
    int res;
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
-   Log(LGPFX" %s: broadcasting tx %s\n", peer->name, hashStr);
+   log_info(LGPFX" %s: broadcasting tx %s\n", peer->name, hashStr);
    res = btcmsg_craft_inv(&bufInv, INV_TYPE_MSG_TX, hash, 1);
    ASSERT(res == 0);
 

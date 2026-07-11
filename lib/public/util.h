@@ -3,11 +3,11 @@
 #include "basic_defs.h"
 
 void Panic(const char *format, ...) PRINTF_GCC_DECL(1, 2) NORETURN;
-void Warning(const char *format, ...) PRINTF_GCC_DECL(1, 2);
+void log_warn(const char *format, ...) PRINTF_GCC_DECL(1, 2);
 
 typedef void (LogCB)(const char *ts, const char *str, void *clientData);
 void Log_SetCB(LogCB *logCB, void *clientData);
-void Log(const char *format, ...) PRINTF_GCC_DECL(1, 2);
+void log_info(const char *format, ...) PRINTF_GCC_DECL(1, 2);
 void Log_SetLevel(int level);
 void Log_Init(const char *filename);
 void Log_Exit(void);
@@ -70,7 +70,7 @@ void condvar_free(struct condvar *cv);
  */
 
 #define NOT_TESTED() \
-     Warning("NOT_TESTED -- %s:%s:%u\n", __FILE__, __FUNCTION__, __LINE__)
+     log_warn("NOT_TESTED -- %s:%s:%u\n", __FILE__, __FUNCTION__, __LINE__)
 
 #define NOT_TESTED_ONCE()       \
       do {                      \
@@ -86,7 +86,7 @@ void condvar_free(struct condvar *cv);
 #define LOG(_lvl, _fmt)                      \
    do {                                      \
       if (DOLOG(_lvl)) {                     \
-         Log _fmt;                           \
+         log_info _fmt;                      \
       }                                      \
    } while (0)
 
@@ -112,7 +112,7 @@ void condvar_free(struct condvar *cv);
 
 #define ASSERT_NOT_TESTED(_x)                           \
    if (unlikely(!(_x))) {                               \
-      Warning("ASSERT_NOT_TESTED failed at %s:%s:%u\n"  \
+      log_warn("ASSERT_NOT_TESTED failed at %s:%s:%u\n"  \
               "--- Expression '%s' is false.\n",        \
               __FILE__, __func__, __LINE__,             \
               STR(_x));                                 \

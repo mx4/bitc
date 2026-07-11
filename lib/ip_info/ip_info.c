@@ -129,7 +129,7 @@ ipinfo_resolve_name_cb(void *clientData)
    res = getnameinfo((struct sockaddr *)&entry->addr, sizeof(entry->addr),
                      host, sizeof host, NULL, 0, 0 /* flags */);
    if (res != 0) {
-      Log(LGPFX" failed to resolve: %s (%d)\n", gai_strerror(res), res);
+      log_info(LGPFX" failed to resolve: %s (%d)\n", gai_strerror(res), res);
       return;
    }
 
@@ -140,7 +140,7 @@ ipinfo_resolve_name_cb(void *clientData)
 
    mutex_unlock(btcui->lock);
 
-   Log(LGPFX" host-%u = %s\n", count, host);
+   log_info(LGPFX" host-%u = %s\n", count, host);
 
    bitcui_req_notify_info_update();
 }
@@ -191,7 +191,7 @@ ipinfo_json_get(cJSON      *root,
 
    item = cJSON_GetObjectItem(root, name);
    if (item == NULL) {
-      Log(LGPFX" couldn't retrieve '%s'.\n", name);
+      log_info(LGPFX" couldn't retrieve '%s'.\n", name);
       return;
    }
 
@@ -260,7 +260,7 @@ ipinfo_resolve_geo_cb(void *clientData)
    res = curl_easy_perform(h);
    curl_easy_cleanup(h);
    if (res != CURLE_OK) {
-      Log(LGPFX" curl_easy_perform returned %s (%d)\n",
+      log_info(LGPFX" curl_easy_perform returned %s (%d)\n",
           curl_easy_strerror(res), res);
       goto exit;
    }
@@ -268,7 +268,7 @@ ipinfo_resolve_geo_cb(void *clientData)
    root = cJSON_Parse(buff_base(buf));
 
    if (root == NULL) {
-      Log(LGPFX" Failed to parse json.\n");
+      log_info(LGPFX" Failed to parse json.\n");
       goto exit;
    }
 
@@ -278,7 +278,7 @@ ipinfo_resolve_geo_cb(void *clientData)
    ipinfo_json_get(root, "region_code",  &entry->region_code);
    ipinfo_json_get(root, "city",         &entry->city);
    cJSON_Delete(root);
-   Log(LGPFX" %s: %s, %s, %s, %s, %s\n",
+   log_info(LGPFX" %s: %s, %s, %s, %s, %s\n",
        ipStr, entry->country_code, entry->country_name,
        entry->region_name, entry->city, entry->region_code);
 exit:

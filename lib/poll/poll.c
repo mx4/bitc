@@ -368,7 +368,7 @@ poll_get_max_fds(void)
 
    res = getrlimit(RLIMIT_NOFILE, &lim);
    if (res) {
-      Warning(LGPFX" getrlimit failed: %s\n", strerror(errno));
+      log_warn(LGPFX" getrlimit failed: %s\n", strerror(errno));
       return 4096;
    }
    return lim.rlim_cur;
@@ -403,7 +403,7 @@ poll_create(void)
 #endif
    poll->poll_fds     = NULL;
    poll->poll_max_fds = poll_get_max_fds();
-   Log(LGPFX" using poll_max_fds=%zu\n", poll->poll_max_fds);
+   log_info(LGPFX" using poll_max_fds=%zu\n", poll->poll_max_fds);
 
    poll->hash = hashtable_create();
 
@@ -505,18 +505,18 @@ poll_device_poll(struct poll_loop *spoll,
 
    if (s == -1 && errno != EINTR) {
       s = errno;
-      Warning(LGPFX" Failed to poll(2): %s (%d)\n", strerror(s), s);
-      Warning(LGPFX" nfds=%d\n", n);
+      log_warn(LGPFX" Failed to poll(2): %s (%d)\n", strerror(s), s);
+      log_warn(LGPFX" nfds=%d\n", n);
       CIRCLIST_SCAN(li, spoll->list_device) {
          struct poll_entry *e = GET_ENTRY(li);
          ssize_t res;
          uint8 c;
-         Log(LGPFX" %s: just poll'd: fd=%d r=%u w=%u cb=%p data=%p\n",
+         log_info(LGPFX" %s: just poll'd: fd=%d r=%u w=%u cb=%p data=%p\n",
              __FUNCTION__, e->u.d.fd, e->u.d.readable, e->u.d.writeable,
              e->callback, e->callbackData);
          res = read(e->u.d.fd, &c, 1);
          if (res != EAGAIN && res != 1) {
-            Warning(LGPFX" fd=%d res=%zd errno=%d (%s)\n",
+            log_warn(LGPFX" fd=%d res=%zd errno=%d (%s)\n",
                     e->u.d.fd, res, errno, strerror(errno));
          }
 
@@ -588,7 +588,7 @@ poll_device_select(struct poll_loop *poll,
 
    if (s == -1 && errno != EINTR) {
       s = errno;
-      Warning(LGPFX" Failed to select(2): %s (%d)\n", strerror(s), s);
+      log_warn(LGPFX" Failed to select(2): %s (%d)\n", strerror(s), s);
       NOT_REACHED();
    }
 }

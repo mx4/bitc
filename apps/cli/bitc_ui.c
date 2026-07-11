@@ -395,7 +395,7 @@ bitcui_notify_init(int *readFd,
    res = pipe(fd);
    if (res != 0) {
       res = errno;
-      Log(LGPFX" Failed to create pipe: %s\n", strerror(res));
+      log_info(LGPFX" Failed to create pipe: %s\n", strerror(res));
       return res;
    }
    *readFd = fd[0];
@@ -435,11 +435,11 @@ bitcui_notify_exit(void)
 
    bitcui_notify_cb(NULL);
 
-   Log(LGPFX" REQ_STATUS_UPDATE: %u\n", reqCount[BTCUI_REQ_STATUS_UPDATE]);
-   Log(LGPFX"   REQ_INFO_UPDATE: %u\n", reqCount[BTCUI_REQ_INFO_UPDATE]);
-   Log(LGPFX" REQ_WALLET_UPDATE: %u\n", reqCount[BTCUI_REQ_WALLET_UPDATE]);
-   Log(LGPFX"     REQ_TX_UPDATE: %u\n", reqCount[BTCUI_REQ_TX_UPDATE]);
-   Log(LGPFX"          REQ_EXIT: %u\n", reqCount[BTCUI_REQ_EXIT]);
+   log_info(LGPFX" REQ_STATUS_UPDATE: %u\n", reqCount[BTCUI_REQ_STATUS_UPDATE]);
+   log_info(LGPFX"   REQ_INFO_UPDATE: %u\n", reqCount[BTCUI_REQ_INFO_UPDATE]);
+   log_info(LGPFX" REQ_WALLET_UPDATE: %u\n", reqCount[BTCUI_REQ_WALLET_UPDATE]);
+   log_info(LGPFX"     REQ_TX_UPDATE: %u\n", reqCount[BTCUI_REQ_TX_UPDATE]);
+   log_info(LGPFX"          REQ_EXIT: %u\n", reqCount[BTCUI_REQ_EXIT]);
 
    ASSERT(btcui->notifyInit);
 
@@ -585,7 +585,7 @@ bitcui_poll_shutdown(void)
 static void
 bitcui_exit(void)
 {
-   Log(LGPFX" %s\n", __FUNCTION__);
+   log_info(LGPFX" %s\n", __FUNCTION__);
 
    fx_exit();
    poolworker_wait(btc->pw);
@@ -618,10 +618,10 @@ bitcui_stop(void)
 
    if (btcui->inuse == 1) {
       int res;
-      Log(LGPFX" stopping ui thread.\n");
+      log_info(LGPFX" stopping ui thread.\n");
       res = pthread_join(btcui->tid, NULL);
       ASSERT(res == 0);
-      Log(LGPFX" ui thread stopped: %d\n", res);
+      log_info(LGPFX" ui thread stopped: %d\n", res);
    }
 
    ASSERT(btcui->lock);
@@ -652,7 +652,7 @@ bitcui_main(void *clientData)
    sigaddset(&set, SIGINT);
    pthread_sigmask(SIG_BLOCK, &set, NULL);
 
-   Log(LGPFX" btcui starting.\n");
+   log_info(LGPFX" btcui starting.\n");
 
    bitcui_init();
    condvar_signal(btcui->cv);
@@ -660,7 +660,7 @@ bitcui_main(void *clientData)
    poll_runloop(btcui->poll, &btcui->stop);
 
    bitcui_exit();
-   Log(LGPFX" btcui done.\n");
+   log_info(LGPFX" btcui done.\n");
    pthread_exit(NULL);
 
    return NULL;
@@ -690,7 +690,7 @@ bitcui_start(bool withui)
       return 0;
    }
 
-   Log(LGPFX" starting ui thread.\n");
+   log_info(LGPFX" starting ui thread.\n");
 
    res = pthread_create(&btcui->tid, NULL, bitcui_main, NULL);
    ASSERT(res == 0);
@@ -894,7 +894,7 @@ bitcui_set_status(const char *fmt, ...)
 
    mutex_unlock(btcui->lock);
 
-   Log(LGPFX" setting UI status to '%s'.\n", str);
+   log_info(LGPFX" setting UI status to '%s'.\n", str);
 
    msg = bitcui_req_alloc(BTCUI_REQ_STATUS_UPDATE, 0);
    bitcui_req_enqueue(msg);

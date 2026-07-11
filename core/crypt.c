@@ -107,7 +107,7 @@ crypt_determine_count(const struct secure_area *pass,
       loop--;
    }
 
-   Log(LGPFX" %s: result= %llu\n", __FUNCTION__, count);
+   log_info(LGPFX" %s: result= %llu\n", __FUNCTION__, count);
 
    return MAX(CRYPT_NUM_ITERATIONS_MIN, count);
 }
@@ -176,7 +176,7 @@ crypt_encrypt(struct crypt_key         *ckey,
    uint8 *c;
    int res;
 
-   Log(LGPFX" %s:%u\n", __FUNCTION__, __LINE__);
+   log_info(LGPFX" %s:%u\n", __FUNCTION__, __LINE__);
 
    *cipher = NULL;
    *cipher_len = 0;
@@ -195,7 +195,7 @@ crypt_encrypt(struct crypt_key         *ckey,
    EVP_CIPHER_CTX_free(ctx);
 
    if (res == 0) {
-      Log(LGPFX" %s: failed to encrypt %zu bytes\n",
+      log_info(LGPFX" %s: failed to encrypt %zu bytes\n",
           __FUNCTION__, plaintext->len);
       OPENSSL_cleanse(c, clen);
       free(c);
@@ -244,7 +244,7 @@ crypt_decrypt(struct crypt_key    *ckey,
    EVP_CIPHER_CTX_free(ctx);
 
    if (res == 0) {
-      Log(LGPFX" %s: failed to decrypt %zu bytes\n", __FUNCTION__, cipher_len);
+      log_info(LGPFX" %s: failed to decrypt %zu bytes\n", __FUNCTION__, cipher_len);
       secure_free(sec);
       return 0;
    }

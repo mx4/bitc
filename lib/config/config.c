@@ -380,7 +380,7 @@ config_parseline(char *line,
 
    res = sscanf(ptr, "%[^=]=%[^\n]", k, v);
    if (res != 2) {
-      Log(LGPFX" Failed to parse '%s'\n", ptr);
+      log_info(LGPFX" Failed to parse '%s'\n", ptr);
       free(k);
       free(v);
       return FALSE;
@@ -398,7 +398,7 @@ config_parseline(char *line,
       v++;
       l = strrchr(v, '\"');
       if (l == v) {
-         Log(LGPFX" Failed to parse string: '%s'\n", v);
+         log_info(LGPFX" Failed to parse string: '%s'\n", v);
          free(k);
          free(v0);
          return FALSE;
@@ -576,11 +576,11 @@ config_load(const char *fileName,
    *confOut = NULL;
    list = NULL;
 
-   Log(LGPFX" Loading config '%s'\n", fileName);
+   log_info(LGPFX" Loading config '%s'\n", fileName);
 
    res = file_open(fileName, TRUE, FALSE, &fd);
    if (res != 0) {
-      Log(LGPFX" Failed to open config '%s': %d\n", fileName, res);
+      log_info(LGPFX" Failed to open config '%s': %d\n", fileName, res);
       return res;
    }
 
@@ -596,7 +596,7 @@ config_load(const char *fileName,
 
       res = file_getline(fd, &line);
       if (res != 0) {
-         Log(LGPFX" Failed to getline: %d\n", res);
+         log_info(LGPFX" Failed to getline: %d\n", res);
          goto fail;
       }
       if (line == NULL) {
@@ -606,7 +606,7 @@ config_load(const char *fileName,
       s = config_parseline(line, &key, &val);
       free(line);
       if (!s) {
-         Log(LGPFX" Failed to parseline: '%s'\n", line);
+         log_info(LGPFX" Failed to parseline: '%s'\n", line);
          res = -1;
          goto fail;
       }
@@ -696,14 +696,14 @@ config_write(struct config *conf,
    }
    res = file_open(conf->fileName, FALSE, FALSE, &fd);
    if (res != 0) {
-      Log(LGPFX" Failed to open config '%s': %s (%d)\n",
+      log_info(LGPFX" Failed to open config '%s': %s (%d)\n",
           filename, strerror(res), res);
       return res;
    }
 
    res = file_truncate(fd, 0);
    if (res != 0) {
-      Log(LGPFX" Failed to truncate '%s': %s (%d)\n",
+      log_info(LGPFX" Failed to truncate '%s': %s (%d)\n",
           filename, strerror(res), res);
       goto exit;
    }
@@ -716,7 +716,7 @@ config_write(struct config *conf,
       char *s = NULL;
 
       if (e->save == 0) {
-         Log(LGPFX" not writing key '%s'\n", e->key);
+         log_info(LGPFX" not writing key '%s'\n", e->key);
          e = e->next;
          continue;
       }
@@ -739,7 +739,7 @@ config_write(struct config *conf,
          numBytes = 0;
          res = file_pwrite(fd, offset, s, strlen(s), &numBytes);
          if (res != 0 || numBytes != strlen(s)) {
-            Log(LGPFX" Failed to pwrite %zd bytes: %s (%d)\n",
+            log_info(LGPFX" Failed to pwrite %zd bytes: %s (%d)\n",
                 strlen(s), strerror(res), res);
             free(s);
             goto exit;

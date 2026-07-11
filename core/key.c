@@ -63,7 +63,7 @@ key_pubkey_from_priv_bn(const BIGNUM *priv,
    }
 
    if (EC_POINT_mul(grp, point, priv, NULL, NULL, ctx) != 1) {
-      Log(LGPFX" EC_POINT_mul failed.\n");
+      log_info(LGPFX" EC_POINT_mul failed.\n");
       goto out_point;
    }
 
@@ -249,7 +249,7 @@ key_generate_new(void)
    if (gctx == NULL || EVP_PKEY_keygen_init(gctx) != 1 ||
        EVP_PKEY_CTX_set_params(gctx, params) != 1 ||
        EVP_PKEY_generate(gctx, &pkey) != 1) {
-      Log(LGPFX" EC key generation failed.\n");
+      log_info(LGPFX" EC key generation failed.\n");
       EVP_PKEY_CTX_free(gctx);
       EVP_PKEY_free(pkey);
       return NULL;

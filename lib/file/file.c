@@ -57,7 +57,7 @@ file_chmod(const char *filename,
    res = errno;
    ASSERT(res == -1);
 
-   Log(LGPFX" failed to chmod %s to 0x%x: %s\n",
+   log_info(LGPFX" failed to chmod %s to 0x%x: %s\n",
        filename, mode, strerror(res));
 
    return res;
@@ -114,7 +114,7 @@ file_glob(const char *path,
    }
    if (res != 0) {
       res = errno;
-      Log(LGPFX" failed to glob(2) on '%s': %d\n", s, res);
+      log_info(LGPFX" failed to glob(2) on '%s': %d\n", s, res);
       goto exit;
    }
 
@@ -146,12 +146,12 @@ file_rmdir(const char *path)
 {
    int err;
 
-   Log(LGPFX" rmdir of '%s'.\n", path);
+   log_info(LGPFX" rmdir of '%s'.\n", path);
 
    err = rmdir(path);
    if (err != 0) {
       err = errno;
-      Log(LGPFX" failed to rmdir '%s': %s (%d)\n",
+      log_info(LGPFX" failed to rmdir '%s': %s (%d)\n",
           path, strerror(err), err);
       return err;
    }
@@ -172,12 +172,12 @@ file_unlink(const char *filename)
 {
    int err;
 
-   Log(LGPFX" unlinking '%s'.\n", filename);
+   log_info(LGPFX" unlinking '%s'.\n", filename);
 
    err = unlink(filename);
    if (err != 0 && errno != ENOENT) {
       err = errno;
-      Log(LGPFX" failed to unlink '%s': %s (%d)\n",
+      log_info(LGPFX" failed to unlink '%s': %s (%d)\n",
           filename, strerror(err), err);
       return err;
    }
@@ -250,7 +250,7 @@ file_listdirectory(const char *directory,
       errno = 0;
       ent = readdir(dir);
       if (errno != 0) {
-         Log(LGPFX" readdir failed: %s (%d)\n",
+         log_info(LGPFX" readdir failed: %s (%d)\n",
              strerror(errno), errno);
          break;
       }
@@ -411,7 +411,7 @@ file_pwrite(const struct file_descriptor *desc,
 
    if (res == -1) {
       int err = errno;
-      Log(LGPFX" failed to pwrite %zu bytes from '%s' at off=%llu: %s (%d)\n",
+      log_info(LGPFX" failed to pwrite %zu bytes from '%s' at off=%llu: %s (%d)\n",
           len, desc->name, offset, strerror(err), err);
       return err;
    }
@@ -449,7 +449,7 @@ file_pread(const struct file_descriptor *desc,
 
    if (res == -1) {
       int err = errno;
-      Log(LGPFX" failed to pread %zu bytes from '%s' at off=%llu: %s (%d)\n",
+      log_info(LGPFX" failed to pread %zu bytes from '%s' at off=%llu: %s (%d)\n",
           len, desc->name, offset, strerror(err), err);
       return err;
    }
@@ -477,7 +477,7 @@ file_getsize(const struct file_descriptor *desc)
    err = fstat(desc->fd, &s);
    if (err == -1) {
       err = errno;
-      Log(LGPFX" failed to call fstat() on '%s': %s (%d)\n",
+      log_info(LGPFX" failed to call fstat() on '%s': %s (%d)\n",
           desc->name, strerror(err), err);
       errno = err;
       return -1;
@@ -505,7 +505,7 @@ file_open(const char *name,
    int flags = 0;
    int err;
 
-   Log(LGPFX" opening  '%s' ro=%u unbuf=%u\n", name, ro, unbuf);
+   log_info(LGPFX" opening  '%s' ro=%u unbuf=%u\n", name, ro, unbuf);
 
    *descOut = NULL;
    desc = safe_malloc(sizeof *desc);
@@ -528,7 +528,7 @@ file_open(const char *name,
 
    if (desc->fd < 0) {
       err = errno;
-      Log(LGPFX" failed to open: '%s': %s (%d)\n",
+      log_info(LGPFX" failed to open: '%s': %s (%d)\n",
           name, strerror(err), err);
       goto exit;
    }
@@ -538,7 +538,7 @@ file_open(const char *name,
       err = fcntl(desc->fd, F_NOCACHE, 1);
       if (err == -1) {
          err = errno;
-         Log(LGPFX" failed to fcntl(F_NOCACHE): '%s': %s (%d)\n",
+         log_info(LGPFX" failed to fcntl(F_NOCACHE): '%s': %s (%d)\n",
              name, strerror(err), err);
          close(desc->fd);
          goto exit;
@@ -601,13 +601,13 @@ file_mkdir(const char *pathname)
 {
    int res;
 
-   Log(LGPFX" creating directory '%s'\n", pathname);
+   log_info(LGPFX" creating directory '%s'\n", pathname);
 
    res = mkdir(pathname, S_IRWXU | S_IRGRP | S_IROTH);
 
    if (res < 0) {
       int err = errno;
-      Log(LGPFX" failed to create directory: '%s': %s (%d)\n",
+      log_info(LGPFX" failed to create directory: '%s': %s (%d)\n",
           pathname, strerror(err), err);
       return err;
    }
@@ -628,13 +628,13 @@ file_create(const char *filename)
 {
    int fd;
 
-   Log(LGPFX" creating file '%s'\n", filename);
+   log_info(LGPFX" creating file '%s'\n", filename);
 
    fd = open(filename, O_CREAT, S_IRWXU|S_IRGRP|S_IROTH);
 
    if (fd < 0) {
       int err = errno;
-      Log(LGPFX" failed to create file: '%s': %s (%d)\n",
+      log_info(LGPFX" failed to create file: '%s': %s (%d)\n",
           filename, strerror(err), err);
       return err;
    }
@@ -657,12 +657,12 @@ file_truncate(const struct file_descriptor *desc,
 {
    int res;
 
-   Log(LGPFX" truncating '%s' to size %llu\n", desc->name, offset);
+   log_info(LGPFX" truncating '%s' to size %llu\n", desc->name, offset);
 
    res = ftruncate(desc->fd, offset);
    if (res != 0) {
       res = errno;
-      Log(LGPFX" failed to truncate: %s (%d)\n", strerror(res), res);
+      log_info(LGPFX" failed to truncate: %s (%d)\n", strerror(res), res);
    }
 
    return res;
@@ -702,7 +702,7 @@ file_sync(const struct file_descriptor *desc)
    err = fsync(desc->fd);
    if (err != 0) {
       err = errno;
-      Warning(LGPFX" Failed to fsync: %s\n", strerror(err));
+      log_warn(LGPFX" Failed to fsync: %s\n", strerror(err));
    }
    return err;
 }
@@ -750,7 +750,7 @@ file_close(struct file_descriptor *desc)
    err = close(desc->fd);
    if (err != 0) {
       err = errno;
-      Log(LGPFX" failed to close '%s': %s (%d)\n",
+      log_info(LGPFX" failed to close '%s': %s (%d)\n",
           desc->name, strerror(err), err);
    }
    if (desc->f) {

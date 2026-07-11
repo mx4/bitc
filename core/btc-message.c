@@ -104,7 +104,7 @@ btcmsg_str_to_type(const char str[12])
          return i;
       }
    }
-   Warning(LGPFX" Unknown cmd '%s'\n", msg);
+   log_warn(LGPFX" Unknown cmd '%s'\n", msg);
    return BTC_MSG_UNKNOWN;
 }
 
@@ -128,12 +128,12 @@ btcmsg_print_header(const btc_block_header *header)   // IN
    uint256_snprintf_reverse(mrklStr, sizeof mrklStr, &header->merkleRoot);
    timeStr = print_time_utc(header->timestamp);
 
-   Warning(LGPFX" version    = %u\n", header->version);
-   Warning(LGPFX" prevBlock  = %s\n", prevStr);
-   Warning(LGPFX" merkleRoot = %s\n", mrklStr);
-   Warning(LGPFX" timestamp  = %s (%#x)\n", timeStr, header->timestamp);
-   Warning(LGPFX" bits       = %#x\n", header->bits);
-   Warning(LGPFX" nonce      = %#x / %u\n", header->nonce, header->nonce);
+   log_warn(LGPFX" version    = %u\n", header->version);
+   log_warn(LGPFX" prevBlock  = %s\n", prevStr);
+   log_warn(LGPFX" merkleRoot = %s\n", mrklStr);
+   log_warn(LGPFX" timestamp  = %s (%#x)\n", timeStr, header->timestamp);
+   log_warn(LGPFX" bits       = %#x\n", header->bits);
+   log_warn(LGPFX" nonce      = %#x / %u\n", header->nonce, header->nonce);
 
    free(timeStr);
 }
@@ -172,11 +172,11 @@ btcmsg_print_txout(const btc_msg_tx_out *txOut)
                          txOut->scriptPubKey, txOut->scriptLength);
    }
 
-   Warning(LGPFX"    value        = %.8f BTC\n", txOut->value / ONE_BTC);
-   Warning(LGPFX"    scriptLen    = %llu\n", txOut->scriptLength);
-   Warning(LGPFX"    scriptPubKey = %s\n", scriptStr);
+   log_warn(LGPFX"    value        = %.8f BTC\n", txOut->value / ONE_BTC);
+   log_warn(LGPFX"    scriptLen    = %llu\n", txOut->scriptLength);
+   log_warn(LGPFX"    scriptPubKey = %s\n", scriptStr);
    if (addr) {
-      Warning(LGPFX"    scriptPayee  = %s\n", addr);
+      log_warn(LGPFX"    scriptPayee  = %s\n", addr);
       free(addr);
    }
 }
@@ -200,11 +200,11 @@ btcmsg_print_txin(const btc_msg_tx_in *txIn)
 
    str_snprintf_bytes(scriptStr, sizeof scriptStr, NULL, txIn->scriptSig, txIn->scriptLength);
 
-   Warning(LGPFX"    prevTxHash   = %s\n", prevStr);
-   Warning(LGPFX"    prevTxOutIdx = %u\n", txIn->prevTxOutIdx);
-   Warning(LGPFX"    scriptLen    = %llu\n", txIn->scriptLength);
-   Warning(LGPFX"    scriptSig    = '%s'\n", scriptStr);
-   Warning(LGPFX"    sequence     = %#x\n", txIn->sequence);
+   log_warn(LGPFX"    prevTxHash   = %s\n", prevStr);
+   log_warn(LGPFX"    prevTxOutIdx = %u\n", txIn->prevTxOutIdx);
+   log_warn(LGPFX"    scriptLen    = %llu\n", txIn->scriptLength);
+   log_warn(LGPFX"    scriptSig    = '%s'\n", scriptStr);
+   log_warn(LGPFX"    sequence     = %#x\n", txIn->sequence);
 }
 
 
@@ -221,21 +221,21 @@ btcmsg_print_tx(const btc_msg_tx *tx)
 {
    uint64 i;
 
-   Log("================================================================\n");
-   Warning(LGPFX"  version  = %u\n", tx->version);
-   Warning(LGPFX"  lockTime = %u\n", tx->lock_time);
-   Warning(LGPFX"  inCount  = %llu\n", tx->in_count);
+   log_info("================================================================\n");
+   log_warn(LGPFX"  version  = %u\n", tx->version);
+   log_warn(LGPFX"  lockTime = %u\n", tx->lock_time);
+   log_warn(LGPFX"  inCount  = %llu\n", tx->in_count);
 
    for (i = 0; i < tx->in_count; i++) {
       btcmsg_print_txin(tx->tx_in + i);
    }
 
-   Warning(LGPFX"  outCount = %llu\n", tx->out_count);
+   log_warn(LGPFX"  outCount = %llu\n", tx->out_count);
 
    for (i = 0; i < tx->out_count; i++) {
       btcmsg_print_txout(tx->tx_out + i);
    }
-   Log("================================================================\n");
+   log_info("================================================================\n");
 }
 
 
@@ -254,7 +254,7 @@ btcmsg_print_block(const btc_msg_block *blk)
 
    btcmsg_print_header(&blk->header);
 
-   Warning(LGPFX" txCount = %llu\n", blk->txCount);
+   log_warn(LGPFX" txCount = %llu\n", blk->txCount);
 
    for (i = 0; i < blk->txCount; i++) {
       btcmsg_print_tx(blk->tx + i);
@@ -293,11 +293,11 @@ btcmsg_header_valid(const btc_msg_header *hdr)
    magic = btc->testnet ? BTC_NET_MAGIC_TESTNET : BTC_NET_MAGIC_MAIN;
 
    if (hdr->magic != magic) {
-      Log(LGPFX" invalid magic: %#x vs %#x\n", hdr->magic, magic);
+      log_info(LGPFX" invalid magic: %#x vs %#x\n", hdr->magic, magic);
       return 0;
    }
    if (hdr->payloadLength > 256 * 1024) {
-      Log(LGPFX" payloadLength = %u\n", hdr->payloadLength);
+      log_info(LGPFX" payloadLength = %u\n", hdr->payloadLength);
       return 0;
    }
    return 1;
@@ -377,7 +377,7 @@ btcmsg_parse_notfound(struct buff *buf,
       }
 
       uint256_snprintf_reverse(str, sizeof str, &inv.hash);
-      Warning(LGPFX" NOTFOUND: inv: %s %s\n", str, btc_inv_type2str(inv.type));
+      log_warn(LGPFX" NOTFOUND: inv: %s %s\n", str, btc_inv_type2str(inv.type));
 
       if (blockHashes && inv.type == INV_TYPE_MSG_BLOCK) {
          blockHashes[numBlockHashes++] = inv.hash;
@@ -645,7 +645,7 @@ btcmsg_parse_merkleblock(struct buff          *buf,
    if (res != 0 || blk->hashCount > BTC_MSG_MERKLE_BLOCK_MAX_TX
        || blk->hashCount > blk->txCount
        || blk->txCount == 0 || blk->txCount > (1u << 22)) {
-      Log(LGPFX" too many hashes: %llu vs %u (re=%d)\n",
+      log_info(LGPFX" too many hashes: %llu vs %u (re=%d)\n",
           blk->hashCount, blk->txCount, res);
       goto error;
    }
@@ -660,7 +660,7 @@ btcmsg_parse_merkleblock(struct buff          *buf,
    res |= deserialize_varint(buf, &blk->bitArraySize);
    // XXX: make the test below correct.
    if (blk->bitArraySize > blk->txCount) {
-      Log(LGPFX" bitArraySize = %llu\n", blk->bitArraySize);
+      log_info(LGPFX" bitArraySize = %llu\n", blk->bitArraySize);
       goto error;
    }
    blk->bit = safe_malloc(blk->bitArraySize);
@@ -674,7 +674,7 @@ btcmsg_parse_merkleblock(struct buff          *buf,
    }
 
    if (!btcmsg_verify_merkle_tree(blk)) {
-      Log(LGPFX" failed to verify merkle branch.\n");
+      log_info(LGPFX" failed to verify merkle branch.\n");
       res = 1;
       goto error;
    }
@@ -1228,7 +1228,7 @@ btcmsg_print_version(const char            *pfx,
 {
    char *s = print_time_utc(v->time);
 
-   Log(LGPFX" %s: '%s' @%d -- '%s' -- height=%u --svc=%#llx\n",
+   log_info(LGPFX" %s: '%s' @%d -- '%s' -- height=%u --svc=%#llx\n",
        pfx, v->strVersion, v->version, s, v->startingHeight, v->services);
 
    free(s);
@@ -1250,7 +1250,7 @@ btcmsg_print_addr(const btc_msg_address *addr,
    char *s;
 
    s = print_time_utc(addr->time);
-   Log(LGPFX" %s : p=%u %s -- ip: %u.%u.%u.%u\n",
+   log_info(LGPFX" %s : p=%u %s -- ip: %u.%u.%u.%u\n",
        pfx, ntohs(addr->port), s,
        addr->ip[12+0],
        addr->ip[12+1],
@@ -1668,7 +1668,7 @@ btcmsg_parse_cfilter(struct buff *buf, btc_msg_cfilter *cf)
       return 1;
    }
    if (cf->numBytes > 4000000) {
-      Warning(LGPFX" cfilter numBytes=%llu exceeds cap.\n",
+      log_warn(LGPFX" cfilter numBytes=%llu exceeds cap.\n",
               (unsigned long long)cf->numBytes);
       return 1;
    }
@@ -1699,7 +1699,7 @@ btcmsg_parse_cfheaders(struct buff *buf, btc_msg_cfheaders *cfh)
       return 1;
    }
    if (cfh->numHeaders > 2000) {
-      Warning(LGPFX" cfheaders numHeaders=%llu exceeds cap.\n",
+      log_warn(LGPFX" cfheaders numHeaders=%llu exceeds cap.\n",
               (unsigned long long)cfh->numHeaders);
       return 1;
    }
@@ -1731,7 +1731,7 @@ btcmsg_parse_cfcheckpt(struct buff *buf, btc_msg_cfcheckpt *cfc)
       return 1;
    }
    if (cfc->numHeaders > 100000) {
-      Warning(LGPFX" cfcheckpt numHeaders=%llu exceeds cap.\n",
+      log_warn(LGPFX" cfcheckpt numHeaders=%llu exceeds cap.\n",
               (unsigned long long)cfc->numHeaders);
       return 1;
    }

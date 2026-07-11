@@ -188,16 +188,16 @@ addrbook_open(struct config *config,
    book->unsaved   = 0;
 
    if (!file_exists(book->filename)) {
-      Warning(LGPFX" creating new addrbook: %s.\n", book->filename);
+      log_warn(LGPFX" creating new addrbook: %s.\n", book->filename);
       res = file_create(book->filename);
       if (res != 0) {
-         Warning(LGPFX" failed to create new addrbook: %s.\n",
+         log_warn(LGPFX" failed to create new addrbook: %s.\n",
                  strerror(res));
          goto exit;
       }
       res = file_chmod(book->filename, 0600);
       if (res != 0) {
-         Warning(LGPFX" failed to chmod 0600 addrbook: %s.\n",
+         log_warn(LGPFX" failed to chmod 0600 addrbook: %s.\n",
                  strerror(res));
          goto exit;
       }
@@ -205,7 +205,7 @@ addrbook_open(struct config *config,
 
    res = file_open(book->filename, 0, 0, &book->desc);
    if (res) {
-      Warning(LGPFX" failed to open addrbook '%s' : %s\n",
+      log_warn(LGPFX" failed to open addrbook '%s' : %s\n",
               book->filename, strerror(res));
       goto exit;
    }
@@ -219,7 +219,7 @@ addrbook_open(struct config *config,
       char *s = print_size(size);
       char *name = file_getname(book->filename);
 
-      Warning(LGPFX" reading file %s -- %s -- %llu addrs.\n",
+      log_warn(LGPFX" reading file %s -- %s -- %llu addrs.\n",
               name, s, size / sizeof(btc_msg_address));
       free(name);
       free(s);
@@ -274,7 +274,7 @@ addrbook_zap(struct config *config)
    filename = addrbook_get_path(config);
 
    if (file_exists(filename)) {
-      Warning(LGPFX" removing addrbook '%s'.\n", filename);
+      log_warn(LGPFX" removing addrbook '%s'.\n", filename);
       file_unlink(filename);
    }
    free(filename);
@@ -307,15 +307,15 @@ addrbook_save(struct addrbook *book)
 
    res = file_truncate(book->desc, 0);
    if (res != 0) {
-      Warning(LGPFX" failed to truncate addrbook: %s\n",
+      log_warn(LGPFX" failed to truncate addrbook: %s\n",
               strerror(res));
    }
 
-   Log(LGPFX" saving %u addr.\n", count);
+   log_info(LGPFX" saving %u addr.\n", count);
 
    res = file_pwrite(book->desc, 0, addrs, len, &numWritten);
    if (res || numWritten != len) {
-      Warning(LGPFX" Failed to write addrbook: %s\n",
+      log_warn(LGPFX" Failed to write addrbook: %s\n",
               strerror(res));
    } else {
       book->unsaved = 0;

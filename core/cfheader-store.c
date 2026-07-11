@@ -118,12 +118,12 @@ cfheaderstore_write_header(struct cfheaderstore *cfs)
    write_le32(hdr + 5, (uint32)cfs->count);
 
    if (lseek(cfs->fd, 0, SEEK_SET) < 0) {
-      Warning(LGPFX" lseek failed: %s\n", strerror(errno));
+      log_warn(LGPFX" lseek failed: %s\n", strerror(errno));
       return 1;
    }
    n = write(cfs->fd, hdr, sizeof hdr);
    if (n != (ssize_t)sizeof hdr) {
-      Warning(LGPFX" short header write: %s\n", strerror(errno));
+      log_warn(LGPFX" short header write: %s\n", strerror(errno));
       return 1;
    }
    fsync(cfs->fd);
@@ -157,7 +157,7 @@ cfheaderstore_init(const char *filename,
 
    cfs->fd = open(filename, O_RDWR | O_CREAT, 0600);
    if (cfs->fd < 0) {
-      Warning(LGPFX" cannot open '%s': %s\n", filename, strerror(errno));
+      log_warn(LGPFX" cannot open '%s': %s\n", filename, strerror(errno));
       res = 1;
       goto fail;
    }
@@ -171,7 +171,7 @@ cfheaderstore_init(const char *filename,
          goto fail;
       }
    } else if (n != (ssize_t)sizeof hdr) {
-      Warning(LGPFX" truncated header in '%s'; reinitializing.\n", filename);
+      log_warn(LGPFX" truncated header in '%s'; reinitializing.\n", filename);
       cfs->count = 0;
       if (cfheaderstore_write_header(cfs)) {
          res = 1;
@@ -182,7 +182,7 @@ cfheaderstore_init(const char *filename,
       if (hdr[0] != CFHS_MAGIC_0 || hdr[1] != CFHS_MAGIC_1 ||
           hdr[2] != CFHS_MAGIC_2 || hdr[3] != CFHS_MAGIC_3 ||
           hdr[4] != CFHS_VERSION) {
-         Warning(LGPFX" bad magic/version in '%s'; reinitializing.\n", filename);
+         log_warn(LGPFX" bad magic/version in '%s'; reinitializing.\n", filename);
          cfs->count = 0;
          if (cfheaderstore_write_header(cfs)) {
             res = 1;
@@ -197,7 +197,7 @@ cfheaderstore_init(const char *filename,
             uint8 rec[CFHS_RECORD_SIZE];
             n = read(cfs->fd, rec, sizeof rec);
             if (n != (ssize_t)sizeof rec) {
-               Warning(LGPFX" truncated record %d in '%s'; stopping at %d.\n",
+               log_warn(LGPFX" truncated record %d in '%s'; stopping at %d.\n",
                        i, filename, cfs->count);
                break;
             }
@@ -218,7 +218,7 @@ cfheaderstore_init(const char *filename,
       }
    }
 
-   Log(LGPFX" loaded %d filter headers from '%s'.\n", cfs->count, filename);
+   log_info(LGPFX" loaded %d filter headers from '%s'.\n", cfs->count, filename);
 
    *cfs_out = cfs;
    return 0;
@@ -292,12 +292,12 @@ cfheaderstore_append(struct cfheaderstore *cfs, int height,
    /* Internal invariant: height must be tip+1 (or 0 if empty). */
    if (cfs->count == 0) {
       if (height != 0) {
-         Warning(LGPFX" first append must be height 0, got %d.\n", height);
+         log_warn(LGPFX" first append must be height 0, got %d.\n", height);
          return 1;
       }
    } else {
       if (height != cfs->entries[cfs->count - 1].height + 1) {
-         Warning(LGPFX" append height %d but expected %d.\n", height,
+         log_warn(LGPFX" append height %d but expected %d.\n", height,
                  cfs->entries[cfs->count - 1].height + 1);
          return 1;
       }
@@ -318,12 +318,12 @@ cfheaderstore_append(struct cfheaderstore *cfs, int height,
    /* Seek past header + existing records and write. */
    offset = CFHS_HEADER_SIZE + (off_t)cfs->count * CFHS_RECORD_SIZE;
    if (lseek(cfs->fd, offset, SEEK_SET) < 0) {
-      Warning(LGPFX" lseek failed: %s\n", strerror(errno));
+      log_warn(LGPFX" lseek failed: %s\n", strerror(errno));
       return 1;
    }
    n = write(cfs->fd, rec, sizeof rec);
    if (n != (ssize_t)sizeof rec) {
-      Warning(LGPFX" short record write: %s\n", strerror(errno));
+      log_warn(LGPFX" short record write: %s\n", strerror(errno));
       return 1;
    }
    fsync(cfs->fd);

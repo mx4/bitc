@@ -144,13 +144,13 @@ txdb_print_coins(const struct txdb *txdb,
 
    n = hashtable_getnumentries(txdb->hash_txo);
    if (n == 0) {
-      Log(LGPFX" %s: no coins found\n", __FUNCTION__);
+      log_info(LGPFX" %s: no coins found\n", __FUNCTION__);
       return;
    }
 
    hashtable_linearize(txdb->hash_txo, sizeof *txo_array, (void *)&txo_array);
    ASSERT(txo_array);
-   Log(LGPFX" %s: %d coins available:\n", __FUNCTION__, n);
+   log_info(LGPFX" %s: %d coins available:\n", __FUNCTION__, n);
 
    for (i = 0; i < n; i++) {
       struct txo_entry *txo_ent = txo_array + i;
@@ -161,7 +161,7 @@ txdb_print_coins(const struct txdb *txdb,
       }
 
       uint256_snprintf_reverse(hashStr, sizeof hashStr, &txo_ent->txHash);
-      Log(LGPFX" txo%03d: %s sp=%u id=%3u v=%llu\n",
+      log_info(LGPFX" txo%03d: %s sp=%u id=%3u v=%llu\n",
           i, txo_ent->btc_addr, txo_ent->spent, txo_ent->outIdx, txo_ent->value);
    }
    free(txo_array);
@@ -336,7 +336,7 @@ txdb_serialize_tx_key(uint64 tx_seq,
    snprintf(str, sizeof str, "/tx/%010llu/%s", tx_seq, hashStr);
    serialize_bytes(buf, str, strlen(str) + 1); /* include terminal '\0' */
 
-   Log(LGPFX" adding %s seq=%llu : '%s'\n", hashStr, tx_seq, str);
+   log_info(LGPFX" adding %s seq=%llu : '%s'\n", hashStr, tx_seq, str);
 
    return buf;
 }
@@ -523,14 +523,14 @@ txdb_zap(struct config *config)
       goto exit;
    }
 
-   Warning(LGPFX" destroying txdb @ '%s'\n", path);
+   log_warn(LGPFX" destroying txdb @ '%s'\n", path);
 
    options = leveldb_options_create();
    leveldb_options_set_info_log(options, NULL);
    leveldb_destroy_db(options, path, &err);
    leveldb_options_destroy(options);
    if (err) {
-      Warning(LGPFX" failed to destroy DB %s: %s\n", path, err);
+      log_warn(LGPFX" failed to destroy DB %s: %s\n", path, err);
       free(err);
       res = 1;
    }
@@ -565,7 +565,7 @@ txdb_process_tx_entry(struct txdb      *txdb,
    ASSERT(*relevant == 0);
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, txHash);
-   Log(LGPFX" processing  %s\n", hashStr);
+   log_info(LGPFX" processing  %s\n", hashStr);
 
    /*
     * Look at all the tx referred to by the inputs. If any of these match
@@ -670,7 +670,7 @@ txdb_get_balance(struct txdb *txdb)
 
    hashtable_for_each(txdb->hash_txo, txdb_get_balance_cb, &balance);
 
-   Log(LGPFX" BALANCE =  %llu -- %.8f BTC\n",
+   log_info(LGPFX" BALANCE =  %llu -- %.8f BTC\n",
        balance / 10, balance / ONE_BTC);
 
    return balance;
@@ -704,7 +704,7 @@ txdb_remove_from_hashtable(struct txdb      *txdb,
    uint256_snprintf_reverse(hashStr, sizeof hashStr, txHash);
 
    s = hashtable_remove(txdb->hash_tx, txHash, sizeof *txHash);
-   Warning(LGPFX" %s removed from hash_tx: %d (count=%u)\n",
+   log_warn(LGPFX" %s removed from hash_tx: %d (count=%u)\n",
            hashStr, s, hashtable_getnumentries(txdb->hash_tx));
 }
 
@@ -771,7 +771,7 @@ txdb_open_db(struct txdb *txdb)
    leveldb_options_set_create_if_missing(txdb->db_opts, 1);
    txdb->db = leveldb_open(txdb->db_opts, txdb->path, &err);
    if (err) {
-      Warning(LGPFX" failed to open db '%s' : %s\n", txdb->path, err);
+      log_warn(LGPFX" failed to open db '%s' : %s\n", txdb->path, err);
       printf("btc failed to open the leveldb database at '%s' : %s\n",
              txdb->path, err);
       printf("Could there be another instance of btc running?\n");
@@ -845,19 +845,19 @@ txdb_load_tx(struct txdb *txdb,
          int hours = numSec / (60 * 60);
          int min  = (numSec % (60 * 60)) / 60;
 
-         Log(LGPFX" unconfirmed tx %s was sent %d hours %d min ago.\n",
+         log_info(LGPFX" unconfirmed tx %s was sent %d hours %d min ago.\n",
              hashStr, hours, min);
       }
 
       buff_init(&buf, txd->buf, txd->len);
 
-      Log(LGPFX" adding tx %s to relay-set\n", hashStr);
+      log_info(LGPFX" adding tx %s to relay-set\n", hashStr);
       peergroup_new_tx_broadcast(btc->peerGroup, &buf,
                                  txd->timestamp + 2 * 60 * 60,
                                  &txHash);
    } else {
       uint256_snprintf_reverse(hashStr, sizeof hashStr, &txd->blkHash);
-      Log(LGPFX" tx in block %s\n", hashStr);
+      log_info(LGPFX" tx in block %s\n", hashStr);
    }
 
    free(txd->buf);
@@ -894,7 +894,7 @@ txdb_open(struct config *config,
    theTxdb = txdb;
 
    if (!file_exists(txdb->path)) {
-      Log(LGPFX" txdb DB '%s' does not exist. Creating..\n", txdb->path);
+      log_info(LGPFX" txdb DB '%s' does not exist. Creating..\n", txdb->path);
    }
 
    res = txdb_open_db(txdb);
@@ -905,7 +905,7 @@ txdb_open(struct config *config,
 
    res = file_chmod(txdb->path, 0700);
    if (res) {
-      Log(LGPFX" Failed to chmod txdb to 0700: %s\n", strerror(res));
+      log_info(LGPFX" Failed to chmod txdb to 0700: %s\n", strerror(res));
       goto error;
    }
 
@@ -923,7 +923,7 @@ txdb_open(struct config *config,
       key = leveldb_iter_key(iter, &klen);
       val = leveldb_iter_value(iter, &vlen);
 
-      Log(LGPFX" found entry \"%s\" klen=%zu vlen=%zu\n", key, klen, vlen);
+      log_info(LGPFX" found entry \"%s\" klen=%zu vlen=%zu\n", key, klen, vlen);
 
       if (klen > 4 && strncmp(key, "/tx/", 4) == 0) {
          res = txdb_load_tx(txdb, key, klen, val, vlen);
@@ -994,7 +994,7 @@ txdb_save_tx(struct txdb   *txdb,
    buff_free(bufd);
 
    if (err) {
-      Warning(LGPFX" failed to save tx %s: %s\n", hashStr, err);
+      log_warn(LGPFX" failed to save tx %s: %s\n", hashStr, err);
       free(err);
    }
 
@@ -1051,7 +1051,7 @@ txdb_confirm_one_tx(struct txdb   *txdb,
 
    uint256_snprintf_reverse(bkHashStr, sizeof bkHashStr, blkHash);
    uint256_snprintf_reverse(txHashStr, sizeof txHashStr, txHash);
-   Warning(LGPFX" %s confirmed in %s\n", txHashStr, bkHashStr);
+   log_warn(LGPFX" %s confirmed in %s\n", txHashStr, bkHashStr);
 
    NOT_TESTED();
 
@@ -1091,7 +1091,7 @@ txdb_confirm_one_tx(struct txdb   *txdb,
                   buff_base(buf), buff_curlen(buf), &err);
       buff_free(buf);
       if (err) {
-         Warning(LGPFX" failed to write tx entry: %s\n", err);
+         log_warn(LGPFX" failed to write tx entry: %s\n", err);
       }
 
       txdb_export_tx_info(txdb);
@@ -1145,7 +1145,7 @@ txdb_remember_tx(struct txdb   *txdb,
    uint256_snprintf_reverse(hashStr, sizeof hashStr, txHash);
    txdb_process_tx_entry(txdb, txHash, blkHash, &txe->tx, &txe->relevant);
    if (txe->relevant == 0) {
-      Warning(LGPFX" tx %s not relevant (%u)\n",
+      log_warn(LGPFX" tx %s not relevant (%u)\n",
               hashStr, hashtable_getnumentries(txdb->hash_tx));
       return 0;
    }
@@ -1158,7 +1158,7 @@ txdb_remember_tx(struct txdb   *txdb,
     * OK -- this transaction is relevant to our wallet.
     */
    *relevant = 1;
-   Warning(LGPFX" tx %s ok (%u)\n", hashStr, hashtable_getnumentries(txdb->hash_tx));
+   log_warn(LGPFX" tx %s ok (%u)\n", hashStr, hashtable_getnumentries(txdb->hash_tx));
 
    res = txdb_save_tx(txdb, blkHash, txHash, ts, buf, len);
    if (res == 0) {
@@ -1308,7 +1308,7 @@ txdb_sign_tx_inputs(struct txdb *txdb,
       ASSERT(txi->prevTxOutIdx < txe->tx.out_count);
       txoFrom = txe->tx.tx_out + txi->prevTxOutIdx;
 
-      Warning(LGPFX" -- signing input #%u\n", i);
+      log_warn(LGPFX" -- signing input #%u\n", i);
 
       res = script_sign(btc->wallet, txoFrom, tx, i, SIGHASH_ALL);
       ASSERT(res == 0);
@@ -1404,7 +1404,7 @@ txdb_select_coins(struct txdb              *txdb,
     * txo_array is sorted in chronological order, so we'll be consuming old
     * coins first.
     */
-   Log(LGPFX" select_coins: total_value=%llu fee=%llu\n",
+   log_info(LGPFX" select_coins: total_value=%llu fee=%llu\n",
        desc->total_value, desc->fee);
 
    while (value < (desc->total_value + desc->fee) && i < txo_num) {
@@ -1421,7 +1421,7 @@ txdb_select_coins(struct txdb              *txdb,
       }
 
       uint256_snprintf_reverse(hashStr, sizeof hashStr, &txo_ent->txHash);
-      Log(LGPFX" using txo for %s id=%3u of %s\n",
+      log_info(LGPFX" using txo for %s id=%3u of %s\n",
           txo_ent->btc_addr, txo_ent->outIdx, hashStr);
       value += txo_ent->value;
       memcpy(&tx->tx_in[tx->in_count].prevTxHash, &txo_ent->txHash, sizeof txo_ent->txHash);
@@ -1432,7 +1432,7 @@ txdb_select_coins(struct txdb              *txdb,
 
    ASSERT(value >= desc->total_value);
    *change = value - desc->total_value - desc->fee;
-   Log(LGPFX" change=%llu\n", *change);
+   log_info(LGPFX" change=%llu\n", *change);
    free(txo_array);
 }
 
@@ -1483,7 +1483,7 @@ txdb_craft_tx(struct txdb              *txdb,
       btc_change = wallet_get_change_addr(btc->wallet);
       tx->out_count++;
       txdb_set_txo(tx, tx->out_count - 1, btc_change, change);
-      Warning(LGPFX" change: %llu -- %.8f BTC\n", change, change / ONE_BTC);
+      log_warn(LGPFX" change: %llu -- %.8f BTC\n", change, change / ONE_BTC);
    }
 
    txdb_sign_tx_inputs(txdb, tx);
@@ -1496,7 +1496,7 @@ txdb_craft_tx(struct txdb              *txdb,
    buf = buff_alloc();
    serialize_tx(buf, tx);
    if (buff_curlen(buf) > BTC_TX_MAX_SIZE) {
-      Warning(LGPFX" tx too large: %zu\n", buff_curlen(buf));
+      log_warn(LGPFX" tx too large: %zu\n", buff_curlen(buf));
       res = 1;
       goto exit;
    }
@@ -1504,11 +1504,11 @@ txdb_craft_tx(struct txdb              *txdb,
    hash256_calc(buff_base(buf), buff_curlen(buf), &txHash);
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, &txHash);
-   Warning(LGPFX" %s (%zu bytes)\n", hashStr, buff_curlen(buf));
+   log_warn(LGPFX" %s (%zu bytes)\n", hashStr, buff_curlen(buf));
    Log_Bytes(LGPFX" TX: ", buff_base(buf), buff_curlen(buf));
 
    if (bitc_testing) {
-      Warning("TESTING! Not saving/relaying tx.\n");
+      log_warn("TESTING! Not saving/relaying tx.\n");
       goto exit;
    }
 
@@ -1524,7 +1524,7 @@ txdb_craft_tx(struct txdb              *txdb,
    res = peergroup_new_tx_broadcast(btc->peerGroup, buf,
                                     ts + 2 * 60 * 60, &txHash);
    if (res) {
-      Warning(LGPFX" failed to transmit tx: %d\n", res);
+      log_warn(LGPFX" failed to transmit tx: %d\n", res);
       bitcui_set_status("got errors while broadcasting tx");
    }
 exit:

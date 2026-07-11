@@ -183,7 +183,7 @@ poolworker_create(int numThreads)
    atomic_write(&pw->numRunning, 0);
    atomic_write(&pw->exit, 0);
 
-   Log(LGPFX" creating %u threads\n", numThreads);
+   log_info(LGPFX" creating %u threads\n", numThreads);
 
    for (i = 0; i < numThreads; i++) {
       pthread_create(&pw->p[i].tid, NULL, poolworker_main, pw);
@@ -223,7 +223,7 @@ poolworker_destroy(struct poolworker_state *pw)
       pthread_join(pw->p[i].tid, NULL);
       n = pw->p[i].jobsDone;
       if (n > 0) {
-         Log(LGPFX" n[%u]=%u\n", i, n);
+         log_info(LGPFX" n[%u]=%u\n", i, n);
       }
    }
 
@@ -268,14 +268,14 @@ poolworker_wait_for_one_cmp(struct poolworker_state *pw)
 void
 poolworker_wait(struct poolworker_state *pw)
 {
-   Log(LGPFX" quiescing..\n");
+   log_info(LGPFX" quiescing..\n");
 
    pthread_mutex_lock(&pw->lock);
    while (!circlist_empty(pw->jobs_req) || !circlist_empty(pw->jobs_active)) {
       pthread_cond_wait(&pw->cond_cmp, &pw->lock);
    }
    pthread_mutex_unlock(&pw->lock);
-   Log(LGPFX" all done.\n");
+   log_info(LGPFX" all done.\n");
 }
 
 

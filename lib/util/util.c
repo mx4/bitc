@@ -347,7 +347,7 @@ print_backtrace(void)
       return;
    }
    for (i = 0; i < bufSize; i++) {
-      Warning(LGPFX" [%d] = %s\n", i, btStr[i]);
+      log_warn(LGPFX" [%d] = %s\n", i, btStr[i]);
    }
    free(btStr);
 }
@@ -431,7 +431,7 @@ dump:
  */
 
 void
-Warning(const char *format, ...)
+log_warn(const char *format, ...)
 {
    va_list args;
 
@@ -469,7 +469,7 @@ LogAlways(const char *format, ...)
  */
 
 void
-Log(const char *format, ...)
+log_info(const char *format, ...)
 {
    va_list args;
 
@@ -570,7 +570,7 @@ time_get(void)
 
    s = gettimeofday(&t, NULL);
    if (s != 0) {
-      Warning(LGPFX" Failed to gettimeofday(): %d\n", s);
+      log_warn(LGPFX" Failed to gettimeofday(): %d\n", s);
       return 0;
    }
    return (mtime_t)t.tv_sec * 1000 * 1000 + t.tv_usec;
@@ -739,7 +739,7 @@ util_memunlock(const void *ptr,
    }
 
    err = errno;
-   Log(LGPFX" failed to munlock: %s (%d)\n",
+   log_info(LGPFX" failed to munlock: %s (%d)\n",
        strerror(err), err);
 
    return 0;
@@ -766,7 +766,7 @@ util_memlock(const void *ptr,
    }
 
    err = errno;
-   Log(LGPFX" failed to mlock: %s (%d)\n",
+   log_info(LGPFX" failed to mlock: %s (%d)\n",
        strerror(err), err);
 
    return 0;
@@ -967,20 +967,20 @@ util_bumpcoresize(void)
 
    res = getrlimit(RLIMIT_CORE, &lim);
    if (res) {
-      Warning(LGPFX" getrlimit failed: %s\n", strerror(errno));
+      log_warn(LGPFX" getrlimit failed: %s\n", strerror(errno));
       return;
    }
    if (lim.rlim_cur == lim.rlim_max) {
       return;
    }
 
-   Log(LGPFX" changing rlimit core-size: %llx -> %llx\n",
+   log_info(LGPFX" changing rlimit core-size: %llx -> %llx\n",
        (uint64)lim.rlim_cur, (uint64)lim.rlim_max);
    lim.rlim_cur = lim.rlim_max;
 
    res = setrlimit(RLIMIT_CORE, &lim);
    if (res) {
-      Warning(LGPFX" setrlimit failed: %s\n", strerror(errno));
+      log_warn(LGPFX" setrlimit failed: %s\n", strerror(errno));
       return;
    }
 }
@@ -1002,13 +1002,13 @@ util_bumpnofds(void)
 
    res = getrlimit(RLIMIT_NOFILE, &lim);
    if (res) {
-      Warning(LGPFX" getrlimit failed: %s\n", strerror(errno));
+      log_warn(LGPFX" getrlimit failed: %s\n", strerror(errno));
       return;
    }
    if (lim.rlim_cur == lim.rlim_max) {
       return;
    }
-   Log(LGPFX" changing rlimit max fds: %llu -> %llu\n",
+   log_info(LGPFX" changing rlimit max fds: %llu -> %llu\n",
        (uint64)lim.rlim_cur, (uint64)lim.rlim_max);
    if (lim.rlim_max > 100000) {
       lim.rlim_max = 10000;
@@ -1017,7 +1017,7 @@ util_bumpnofds(void)
 
    res = setrlimit(RLIMIT_NOFILE, &lim);
    if (res) {
-      Warning(LGPFX" setrlimit failed: %s\n", strerror(errno));
+      log_warn(LGPFX" setrlimit failed: %s\n", strerror(errno));
    }
 }
 
@@ -1110,7 +1110,7 @@ Log_Bytes(const char *pfx,
 
    str_snprintf_bytes(str, sizeof str, pfx, data, len);
 
-   Log("%s\n", str);
+   log_info("%s\n", str);
 }
 
 

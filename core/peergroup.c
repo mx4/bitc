@@ -136,7 +136,7 @@ peergroup_stop_broadcast_tx(struct peergroup *pg,
    }
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
-   Warning(LGPFX" stop relaying tx %s\n", hashStr);
+   log_warn(LGPFX" stop relaying tx %s\n", hashStr);
 
    ASSERT(txb);
 
@@ -201,8 +201,8 @@ peergroup_set_lastblk(struct peergroup *pg,
    pg->configNeedWrite = 1;
    memcpy(&pg->lastBlk, hash, sizeof *hash);
 
-   Log(LGPFX" was %s\n", prev);
-   Log(LGPFX" now %s\n", next);
+   log_info(LGPFX" was %s\n", prev);
+   log_info(LGPFX" now %s\n", next);
 }
 
 
@@ -304,7 +304,7 @@ peergroup_add_peer(struct peer_addr *paddr)
    if ((btc->peerGroup->active % 250) == 0 &&
        btc->peerGroup->active != last) {
       last = btc->peerGroup->active;
-      Warning(LGPFX" peers: %u\n", btc->peerGroup->active);
+      log_warn(LGPFX" peers: %u\n", btc->peerGroup->active);
    }
 
    peer_add(paddr, btc->peerGroup->peerSequence);
@@ -358,7 +358,7 @@ peergroup_on_ready(void)
 {
    struct circlist_item *li;
 
-   Log(LGPFX" peergroup ready.\n");
+   log_info(LGPFX" peergroup ready.\n");
    bitcui_set_status("online.");
 
    CIRCLIST_SCAN(li, btc->peerGroup->peer_list) {
@@ -387,17 +387,17 @@ peergroup_download_complete(void)
    ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
 
    if (btc->peerGroup->numFetched > 0) {
-      Warning(LGPFX" %d filtered blocks downloaded. refresh complete.\n",
+      log_warn(LGPFX" %d filtered blocks downloaded. refresh complete.\n",
               btc->peerGroup->numFetched);
    } else {
-      Warning(LGPFX" headers and filtered blocks up to date.\n");
+      log_warn(LGPFX" headers and filtered blocks up to date.\n");
    }
    peergroup_download_progress();
 
    if (btc->updateAndExit) {
       bitc_req_stop();
    } else {
-      Log(LGPFX" %s -- BITC_STATE_READY.\n", __FUNCTION__);
+      log_info(LGPFX" %s -- BITC_STATE_READY.\n", __FUNCTION__);
       btc->state = BITC_STATE_READY;
       peergroup_on_ready();
    }
@@ -461,7 +461,7 @@ peergroup_process_filtered_block(struct peer *peer,
       pg->numFetched++;
       peergroup_set_lastblk(pg, &blk->blkHash);
       if ((pg->numFetched % 5000) == 0) {
-         Warning(LGPFX" fetched %6d blocks out of %d\n",
+         log_warn(LGPFX" fetched %6d blocks out of %d\n",
                  pg->numFetched, pg->numToFetch);
       }
    }
@@ -510,7 +510,7 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    blockHash = cf->blockHash;
    blockHeight = blockstore_get_block_height(bs, &blockHash);
    if (blockHeight < 0) {
-      Warning(LGPFX" BIP157: cfilter for unknown block hash; skipping.\n");
+      log_warn(LGPFX" BIP157: cfilter for unknown block hash; skipping.\n");
       return 0;
    }
 
@@ -526,17 +526,17 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
 
       res = cfheaderstore_get_hash(pg->cfStore, blockHeight, &storedHash);
       if (res) {
-         Warning(LGPFX" BIP157: no stored filter hash at height %d; skipping.\n",
+         log_warn(LGPFX" BIP157: no stored filter hash at height %d; skipping.\n",
                  blockHeight);
          return 0;
       }
       hash256_calc(cf->filterData, cf->numBytes, &computedHash);
       if (uint256_issame(&computedHash, &storedHash) == 0) {
-         Warning(LGPFX" BIP157: cfilter hash mismatch at height %d! "
+         log_warn(LGPFX" BIP157: cfilter hash mismatch at height %d! "
                  "Peer may be serving fake filters.\n", blockHeight);
          return 1;
       }
-      Log(LGPFX" BIP157: cfilter verified at height %d.\n", blockHeight);
+      log_info(LGPFX" BIP157: cfilter verified at height %d.\n", blockHeight);
    }
 
    pg->cfVerified++;
@@ -550,7 +550,7 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
     */
    if (btc->stopAfterHeight > 0 && blockHeight >= btc->stopAfterHeight) {
       if (!btc->peerGroup->cfStopRequested) {
-         Warning(LGPFX" BIP157: reached stop-after-height %d; "
+         log_warn(LGPFX" BIP157: reached stop-after-height %d; "
                  "draining %d pending block(s).\n",
                  btc->stopAfterHeight, btc->peerGroup->cfBlocksPending);
          btc->peerGroup->cfStopRequested = 1;
@@ -567,7 +567,7 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
     */
    wallet_get_filter_scripts(btc->wallet, &scripts, &scriptLens, &numScripts);
    if (numScripts == 0) {
-      Log(LGPFX" BIP157: no wallet scripts to match; skipping cfilter at height %d.\n",
+      log_info(LGPFX" BIP157: no wallet scripts to match; skipping cfilter at height %d.\n",
           blockHeight);
       return 0;
    }
@@ -588,7 +588,7 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    }
 
    if (match) {
-      Log(LGPFX" BIP157: cfilter match at height %d; requesting full block.\n",
+      log_info(LGPFX" BIP157: cfilter match at height %d; requesting full block.\n",
           blockHeight);
       pg->numFetched++;
       peergroup_add_pending_block(&blockHash, peer);
@@ -733,7 +733,7 @@ peergroup_check_pending_blocks(void)
       char hashStr[80];
 
       uint256_snprintf_reverse(hashStr, sizeof hashStr, &expiredHash[i]);
-      Warning(LGPFX" BIP157: getdata(MSG_BLOCK) for %s timed out; "
+      log_warn(LGPFX" BIP157: getdata(MSG_BLOCK) for %s timed out; "
               "retrying against another peer.\n", hashStr);
 
       peergroup_remove_pending_block(&expiredHash[i]);
@@ -785,7 +785,7 @@ peergroup_download_headers(struct peer *peer,
    peergroup_download_progress();
 
    if (btc->state == BITC_STATE_STARTING) {
-      Log(LGPFX" %s -- BITC_STATE_UPDATE_HEADERS.\n", __FUNCTION__);
+      log_info(LGPFX" %s -- BITC_STATE_UPDATE_HEADERS.\n", __FUNCTION__);
       btc->state = BITC_STATE_UPDATE_HEADERS;
       bitcui_set_status("online, fetching headers..");
       if (btc->peerGroup->numHdrToFetch > 0) {
@@ -793,7 +793,7 @@ peergroup_download_headers(struct peer *peer,
          mtime_t lag    = (time(NULL) - last_ts) * 1000 * 1000;
          char *lagStr   = print_latency(lag);
 
-         Warning(LGPFX" downloading %d header%s -- %s late\n",
+         log_warn(LGPFX" downloading %d header%s -- %s late\n",
                  btc->peerGroup->numHdrToFetch,
                  btc->peerGroup->numHdrToFetch > 1 ? "s" : "",
                  lagStr);
@@ -863,7 +863,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
    if (first && pg->numHdrToFetch > 0) {
       mtime_t lat = time_get() - pg->firstConnectTS;
       char *s = print_latency(lat);
-      Warning(LGPFX" %d header%s downloaded in %s\n",
+      log_warn(LGPFX" %d header%s downloaded in %s\n",
               pg->numHdrToFetch,
               pg->numHdrToFetch > 1 ? "s" : "", s);
       free(s);
@@ -874,12 +874,12 @@ peergroup_download_filtered_blocks(struct peer *peer)
     * transaction download. Handy for benchmarking `time ./bitc -d ...`.
     */
    if (first && btc->syncAndExit) {
-      Warning(LGPFX" header sync complete; exiting (--sync-and-exit).\n");
+      log_warn(LGPFX" header sync complete; exiting (--sync-and-exit).\n");
       bitc_req_stop();
       return 0;
    }
 
-   Log(LGPFX" %s -- BITC_STATE_UPDATE_TXDB.\n", __FUNCTION__);
+   log_info(LGPFX" %s -- BITC_STATE_UPDATE_TXDB.\n", __FUNCTION__);
    btc->state = BITC_STATE_UPDATE_TXDB;
    bitcui_set_status("online, fetching tx..");
 
@@ -911,7 +911,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
       pg->numToFetch = blockstore_get_height(bs)
          - blockstore_get_block_height(bs, &startHash);
       uint256_snprintf_reverse(hashStr, sizeof hashStr, &startHash);
-      Log(LGPFX" downloading starting at %s\n", hashStr);
+      log_info(LGPFX" downloading starting at %s\n", hashStr);
 
       /*
        * BIP157: initialize the cfilter scan height from the start hash.
@@ -947,7 +947,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
             }
          }
 
-         Log(LGPFX" BIP157: cfheader sync from height %d to %d, "
+         log_info(LGPFX" BIP157: cfheader sync from height %d to %d, "
              "cfilter scan from %d to %d\n",
              pg->cfhdrStartHeight, pg->cfhdrTipHeight,
              pg->cfScanHeight, pg->cfTipHeight);
@@ -960,7 +960,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
       /*
        * Legacy BIP37 path: request merkleblocks via getdata.
        */
-      Log(LGPFX" downloading %d filtered block%s (BIP37)..\n",
+      log_info(LGPFX" downloading %d filtered block%s (BIP37)..\n",
           pg->numToFetch, pg->numToFetch > 1 ? "s" : "");
       blockstore_get_next_hashes(bs, &startHash, &nextHash, &n);
 
@@ -1014,7 +1014,7 @@ peergroup_request_cfilters(struct peer *peer)
 
    if (pg->cfScanHeight > pg->cfTipHeight) {
       /* All cfilters requested; wait for responses to drain. */
-      Log(LGPFX" BIP157: all cfilters requested up to height %d.\n",
+      log_info(LGPFX" BIP157: all cfilters requested up to height %d.\n",
           pg->cfTipHeight);
       return 0;
    }
@@ -1026,7 +1026,7 @@ peergroup_request_cfilters(struct peer *peer)
     */
    res = blockstore_get_block_at_height(bs, batchEnd, &stopHash, NULL);
    if (!res) {
-      Warning(LGPFX" BIP157: cannot get block hash at height %d.\n",
+      log_warn(LGPFX" BIP157: cannot get block hash at height %d.\n",
               batchEnd);
       return 1;
    }
@@ -1040,7 +1040,7 @@ peergroup_request_cfilters(struct peer *peer)
       return res;
    }
 
-   Log(LGPFX" BIP157: requested cfilters for heights %d..%d\n",
+   log_info(LGPFX" BIP157: requested cfilters for heights %d..%d\n",
        pg->cfScanHeight, batchEnd);
 
    pg->cfScanHeight = batchEnd + 1;
@@ -1103,13 +1103,13 @@ peergroup_verify_cfcheckpts(struct peer *peer)
    pg->cfcheckptCount    = 0;
 
    if (nSent == 0) {
-      Warning(LGPFX" BIP157: no NODE_COMPACT_FILTERS peers for checkpoint "
+      log_warn(LGPFX" BIP157: no NODE_COMPACT_FILTERS peers for checkpoint "
               "verification; proceeding with single-peer sync.\n");
       pg->cfcheckptVerified = 1;
       return peergroup_request_cfheaders(peer);
    }
 
-   Log(LGPFX" BIP157: sent getcfcheckpt to %d peer%s; waiting for responses.\n",
+   log_info(LGPFX" BIP157: sent getcfcheckpt to %d peer%s; waiting for responses.\n",
        nSent, nSent > 1 ? "s" : "");
    return 0;
 }
@@ -1150,7 +1150,7 @@ peergroup_cfcheckpt_maybe_complete(struct peer *driver)
    }
    if (pg->cfcheckptAgreed >= 1 && pg->cfcheckptAgreed >= pg->cfcheckptPeers) {
       pg->cfcheckptVerified = 1;
-      Log(LGPFX" BIP157: cfcheckpt verified by %d peer%s; starting cfheader sync.\n",
+      log_info(LGPFX" BIP157: cfcheckpt verified by %d peer%s; starting cfheader sync.\n",
           pg->cfcheckptAgreed, pg->cfcheckptAgreed > 1 ? "s" : "");
       return peergroup_request_cfheaders(driver);
    }
@@ -1189,7 +1189,7 @@ peergroup_notify_peer_gone(struct peer *peer)
    }
 
    pg->cfcheckptPeers--;
-   Warning(LGPFX" BIP157: %s gone while awaiting cfcheckpt; "
+   log_warn(LGPFX" BIP157: %s gone while awaiting cfcheckpt; "
            "lowering target to %d.\n", peer_name(peer), pg->cfcheckptPeers);
 
    if (pg->cfcheckptAgreed < 1) {
@@ -1217,7 +1217,7 @@ peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc)
 
    ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
 
-   Log(LGPFX" BIP157: cfcheckpt from %s: %llu headers.\n",
+   log_info(LGPFX" BIP157: cfcheckpt from %s: %llu headers.\n",
        peer_name(peer), (unsigned long long)cfc->numHeaders);
 
    if (pg->cfcheckptExpected == NULL) {
@@ -1231,21 +1231,21 @@ peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc)
          pg->cfcheckptExpected[i] = cfc->filterHeaders[i];
       }
       pg->cfcheckptAgreed++;
-      Log(LGPFX" BIP157: first cfcheckpt stored (%d checkpoints).\n",
+      log_info(LGPFX" BIP157: first cfcheckpt stored (%d checkpoints).\n",
           pg->cfcheckptCount);
    } else {
       /*
        * Subsequent response: compare against the expected set.
        */
       if ((int)cfc->numHeaders != pg->cfcheckptCount) {
-         Warning(LGPFX" BIP157: cfcheckpt count mismatch: %llu vs %d.\n",
+         log_warn(LGPFX" BIP157: cfcheckpt count mismatch: %llu vs %d.\n",
                  (unsigned long long)cfc->numHeaders, pg->cfcheckptCount);
          agree = 0;
       } else {
          for (i = 0; i < (int)cfc->numHeaders; i++) {
             if (uint256_issame(&cfc->filterHeaders[i],
                                &pg->cfcheckptExpected[i]) == 0) {
-               Warning(LGPFX" BIP157: cfcheckpt mismatch at index %d.\n", i);
+               log_warn(LGPFX" BIP157: cfcheckpt mismatch at index %d.\n", i);
                agree = 0;
                break;
             }
@@ -1254,10 +1254,10 @@ peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc)
 
       if (agree) {
          pg->cfcheckptAgreed++;
-         Log(LGPFX" BIP157: cfcheckpt agrees (%d/%d peers agree).\n",
+         log_info(LGPFX" BIP157: cfcheckpt agrees (%d/%d peers agree).\n",
              pg->cfcheckptAgreed, pg->cfcheckptPeers);
       } else {
-         Warning(LGPFX" BIP157: cfcheckpt DISAGREES; dropping peer %s.\n",
+         log_warn(LGPFX" BIP157: cfcheckpt DISAGREES; dropping peer %s.\n",
                  peer_name(peer));
          return 1;
       }
@@ -1298,7 +1298,7 @@ peergroup_request_cfheaders(struct peer *peer)
 
    if (pg->cfhdrStartHeight > pg->cfhdrTipHeight) {
       /* All cfheaders requested; move on to cfilters. */
-      Log(LGPFX" BIP157: cfheaders synced to height %d; requesting cfilters.\n",
+      log_info(LGPFX" BIP157: cfheaders synced to height %d; requesting cfilters.\n",
           pg->cfhdrTipHeight);
       return peergroup_request_cfilters(peer);
    }
@@ -1310,7 +1310,7 @@ peergroup_request_cfheaders(struct peer *peer)
     */
    res = blockstore_get_block_at_height(bs, batchEnd, &stopHash, NULL);
    if (!res) {
-      Warning(LGPFX" BIP157: cannot get block hash at height %d for cfheaders.\n",
+      log_warn(LGPFX" BIP157: cannot get block hash at height %d for cfheaders.\n",
               batchEnd);
       return 1;
    }
@@ -1321,7 +1321,7 @@ peergroup_request_cfheaders(struct peer *peer)
       return res;
    }
 
-   Log(LGPFX" BIP157: requested cfheaders for heights %d..%d\n",
+   log_info(LGPFX" BIP157: requested cfheaders for heights %d..%d\n",
        pg->cfhdrStartHeight, batchEnd);
 
    pg->lastFilteredBlockReq = stopHash;
@@ -1368,9 +1368,9 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
    expectedPrev = pg->cfhdrPrevHeader;
    if (uint256_iszero(&expectedPrev)) {
       /* First batch: accept the peer's prevFilterHeader. */
-      Log(LGPFX" BIP157: accepting initial prevFilterHeader from peer.\n");
+      log_info(LGPFX" BIP157: accepting initial prevFilterHeader from peer.\n");
    } else if (uint256_issame(&cfh->prevFilterHeader, &expectedPrev) == 0) {
-      Warning(LGPFX" BIP157: cfheaders prevFilterHeader mismatch; dropping peer.\n");
+      log_warn(LGPFX" BIP157: cfheaders prevFilterHeader mismatch; dropping peer.\n");
       return 1;
    }
 
@@ -1403,7 +1403,7 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
       res = cfheaderstore_append(pg->cfStore, startHeight + (int)i,
                                  &filterHeader, &filterHash);
       if (res) {
-         Warning(LGPFX" BIP157: cfheaderstore_append failed at height %d.\n",
+         log_warn(LGPFX" BIP157: cfheaderstore_append failed at height %d.\n",
                  startHeight + (int)i);
          return res;
       }
@@ -1418,7 +1418,7 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
    pg->cfhdrStartHeight = startHeight + (int)cfh->numHeaders;
    pg->cfhdrSyncStarted = 0;  /* allow next batch request */
 
-   Log(LGPFX" BIP157: stored %llu cfheaders (heights %d..%d).\n",
+   log_info(LGPFX" BIP157: stored %llu cfheaders (heights %d..%d).\n",
        (unsigned long long)cfh->numHeaders,
        startHeight, startHeight + (int)cfh->numHeaders - 1);
 
@@ -1429,7 +1429,7 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
       return peergroup_request_cfheaders(peer);
    }
 
-   Log(LGPFX" BIP157: cfheader sync complete to height %d.\n",
+   log_info(LGPFX" BIP157: cfheader sync complete to height %d.\n",
        pg->cfhdrTipHeight);
    return peergroup_request_cfilters(peer);
 }
@@ -1471,7 +1471,7 @@ peergroup_download_filtered_blocks_continue(struct peer *peer)
 
          blockstore_get_next_hashes(btc->blockStore, &lastTxdb, &nextHash, &n);
 
-         Log(LGPFX" %s: querying %d blocks: %u processed out of %d\n",
+         log_info(LGPFX" %s: querying %d blocks: %u processed out of %d\n",
              peer_name(peer), n, btc->peerGroup->numFetched,
              btc->peerGroup->numToFetch);
 
@@ -1530,7 +1530,7 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
    hash256_calc(&blk->header, sizeof blk->header, &blockHash);
    blockHeight = blockstore_get_block_height(bs, &blockHash);
 
-   Log(LGPFX" BIP157: received matched block at height %d, %llu txs\n",
+   log_info(LGPFX" BIP157: received matched block at height %d, %llu txs\n",
        blockHeight, (unsigned long long)blk->txCount);
 
    /*
@@ -1555,7 +1555,7 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
       txBuf = buff_alloc();
       res = serialize_tx(txBuf, &blk->tx[i]);
       if (res) {
-         Warning(LGPFX" BIP157: failed to serialize tx %llu in block %d.\n",
+         log_warn(LGPFX" BIP157: failed to serialize tx %llu in block %d.\n",
                 (unsigned long long)i, blockHeight);
          buff_free(txBuf);
          continue;
@@ -1564,7 +1564,7 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
       rawLen = buff_curlen(txBuf);
       res = wallet_handle_tx(btc->wallet, &blockHash, raw, rawLen);
       if (res) {
-         Warning(LGPFX" BIP157: wallet_handle_tx failed for tx %llu in block %d.\n",
+         log_warn(LGPFX" BIP157: wallet_handle_tx failed for tx %llu in block %d.\n",
                 (unsigned long long)i, blockHeight);
       }
       buff_free(txBuf);
@@ -1577,7 +1577,7 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
     */
    peergroup_remove_pending_block(&blockHash);
    if (pg->cfStopRequested && pg->cfBlocksPending == 0) {
-      Warning(LGPFX" BIP157: matched blocks drained; stopping.\n");
+      log_warn(LGPFX" BIP157: matched blocks drained; stopping.\n");
       peergroup_download_complete();
       bitc_req_stop();
       return 0;
@@ -1653,7 +1653,7 @@ peergroup_retry_block_fetch(struct peer *failedPeer,
    }
 
    if (best == NULL) {
-      Warning(LGPFX" BIP157: no alternate peer to retry %d block fetch(es); "
+      log_warn(LGPFX" BIP157: no alternate peer to retry %d block fetch(es); "
               "will remain pending.\n", numHashes);
       return;
    }
@@ -1663,14 +1663,14 @@ peergroup_retry_block_fetch(struct peer *failedPeer,
       int res;
 
       uint256_snprintf_reverse(hashStr, sizeof hashStr, &hashes[i]);
-      Log(LGPFX" BIP157: retrying block %s via %s.\n",
+      log_info(LGPFX" BIP157: retrying block %s via %s.\n",
           hashStr, peer_name(best));
 
       res = peer_send_getdata(best, INV_TYPE_MSG_BLOCK, &hashes[i], 1);
       if (res == 0) {
          peergroup_add_pending_block(&hashes[i], best);
       } else {
-         Warning(LGPFX" BIP157: retry getdata failed for %s: %d.\n",
+         log_warn(LGPFX" BIP157: retry getdata failed for %s: %d.\n",
                  hashStr, res);
       }
    }
@@ -1763,12 +1763,12 @@ peergroup_print_stats(struct peergroup *peerGroup)
 {
    enum btc_msg_type i;
 
-   Log(LGPFX" active=%u maxActive=%u\n",
+   log_info(LGPFX" active=%u maxActive=%u\n",
        peerGroup->active, peerGroup->maxActive);
 
    for (i = 0; i < BTC_MSG_MAX; i++) {
       if (cmdStats[i].received != 0 || cmdStats[i].sent != 0) {
-         Log(LGPFX" %11s: %6u  / %5u\n",
+         log_info(LGPFX" %11s: %6u  / %5u\n",
              btcmsg_type_to_str(i), cmdStats[i].received, cmdStats[i].sent);
       }
    }
@@ -1929,7 +1929,7 @@ peergroup_check_download_stall(void)
       return;
    }
 
-   Warning(LGPFX" sync stalled for %llu ms; dropping download peer %s.\n",
+   log_warn(LGPFX" sync stalled for %llu ms; dropping download peer %s.\n",
            (unsigned long long)((now - pg->lastProgressTS) / 1000),
            peer_name(dp));
 
@@ -1995,7 +1995,7 @@ peergroup_init(struct config *config,
    char *hashStr;
    int res;
 
-   Log(LGPFX" maxPeers=%u period=%.1f msec\n",
+   log_info(LGPFX" maxPeers=%u period=%.1f msec\n",
        maxPeers, periodUsec / 1000.0);
 
    pg = safe_calloc(1, sizeof *btc->peerGroup);
@@ -2027,7 +2027,7 @@ peergroup_init(struct config *config,
       snprintf(cfhdrPath, sizeof cfhdrPath, "%s/cfheaders.dat", dir);
       res = cfheaderstore_init(cfhdrPath, &pg->cfStore);
       if (res) {
-         Warning(LGPFX" failed to open cfheader store '%s'.\n", cfhdrPath);
+         log_warn(LGPFX" failed to open cfheader store '%s'.\n", cfhdrPath);
          pg->cfStore = NULL;
       }
       free(dir);
@@ -2039,9 +2039,9 @@ peergroup_init(struct config *config,
    hashStr = config_getstring(config, NULL, "peergroup.lastblk");
    if (hashStr) {
       bool s = uint256_from_str(hashStr, &pg->lastBlk);
-      Log(LGPFX" loading lastBlk: %s\n", hashStr);
+      log_info(LGPFX" loading lastBlk: %s\n", hashStr);
       if (s == 0) {
-         Warning(LGPFX" failed to parse lastBlk: %s\n", hashStr);
+         log_warn(LGPFX" failed to parse lastBlk: %s\n", hashStr);
       }
       free(hashStr);
    }
@@ -2080,7 +2080,7 @@ peergroup_add_peer_from_str(struct poll_loop *poll,
    int res;
    bool s;
 
-   Log(LGPFX" seeding %s\n", hostname);
+   log_info(LGPFX" seeding %s\n", hostname);
    res = netasync_resolve(hostname, port, &sockaddr);
    if (res != 0) {
       return;
@@ -2134,7 +2134,7 @@ peergroup_seed(void)
       char *saveptr = NULL;
       char *tok;
 
-      Log(LGPFX" connect-only mode: %s\n", btc->connectHost);
+      log_info(LGPFX" connect-only mode: %s\n", btc->connectHost);
       for (tok = strtok_r(list, ",", &saveptr); tok != NULL;
            tok = strtok_r(NULL, ",", &saveptr)) {
          uint16 hostport = port;
@@ -2158,7 +2158,7 @@ peergroup_seed(void)
       if (addr == NULL) {
          break;
       }
-      Log(LGPFX" adding static peer '%s'\n", addr);
+      log_info(LGPFX" adding static peer '%s'\n", addr);
       peergroup_add_peer_from_str(btc->poll, addr, port);
       free(addr);
    }
@@ -2199,7 +2199,7 @@ peergroup_save_lastblk(struct config *config,
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
    if (!uint256_iszero(hash)) {
-      Log(LGPFX" saving lastBlk: %s\n", hashStr);
+      log_info(LGPFX" saving lastBlk: %s\n", hashStr);
    }
 
    config_setstring(config, hashStr, "peergroup.lastblk");
@@ -2273,7 +2273,7 @@ peergroup_exit(struct peergroup *pg)
    if (btc->updateAndExit && btc->stop == 1) {
       mtime_t delay = time_get() - pg->startTS;
       char *str = print_latency(delay);
-      Warning("Synchronized block-store in %s.\n", str);
+      log_warn("Synchronized block-store in %s.\n", str);
       free(str);
    }
 
@@ -2387,7 +2387,7 @@ peergroup_handle_headers(struct peer            *peer,
          numAdded++;
          btc->peerGroup->numHdrFetched++;
          if (btc->peerGroup->numHdrFetched % 100000 == 0) {
-            Warning(LGPFX" fetched %6d headers out of %d\n",
+            log_warn(LGPFX" fetched %6d headers out of %d\n",
                     btc->peerGroup->numHdrFetched, btc->peerGroup->numHdrToFetch);
          }
       }
@@ -2449,7 +2449,7 @@ peergroup_broadcast_inv(struct peergroup *pg,
    CIRCLIST_SCAN_SAFE(li, next, pg->peer_list) {
       res = peer_send_inv(li, bufInv);
       if (res) {
-         Warning(LGPFX" %s: failed to send inv: %s (%d)\n",
+         log_warn(LGPFX" %s: failed to send inv: %s (%d)\n",
                  peer_name_li(li), strerror(res), res);
       }
    }

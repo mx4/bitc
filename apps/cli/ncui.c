@@ -346,7 +346,7 @@ ncui_panel_refresh(const struct ncpanel *panel)
  *
  * ncui_panel_check_refresh --
  *
- *      This function is called from Log(), so it should not call Log() itself.
+ *      This function is called from log_info(), so it should not call log_info() itself.
  *
  *---------------------------------------------------------------------
  */
@@ -432,7 +432,7 @@ ncui_get_term_size(int *y, int *x)
    *y = LINES;
    *x = COLS;
    if (ioctl(0, TIOCGWINSZ, &ws) != 0) {
-      Log(LGPFX" failed to get terminal size: %s\n", strerror(errno));
+      log_info(LGPFX" failed to get terminal size: %s\n", strerror(errno));
    } else {
       *y = ws.ws_row;
       *x = ws.ws_col;
@@ -758,7 +758,7 @@ ncui_panel_scroll(struct ncpanel *panel,
    if (panel->scroll_on == 0) {
       return;
    }
-   Log(LGPFX" scroll=%d select=%d numLines=%d/%d select_y=%d scroll_y=%d delta=%d down=%u\n",
+   log_info(LGPFX" scroll=%d select=%d numLines=%d/%d select_y=%d scroll_y=%d delta=%d down=%u\n",
        panel->scroll_on, panel->select_on,
        panel->num_lines, panel->max_lines,
        panel->select_y, panel->scroll_y, delta, down);
@@ -838,7 +838,7 @@ ncui_tx_form_process(struct ncui *ncui)
    label = field_buffer(ncui->field[TX_FIELD_LABEL], 0);
    value = field_buffer(ncui->field[TX_FIELD_AMOUNT], 0);
 
-   Log(LGPFX" tX: addr=%s lbl='%s' val=%s BTC\n",
+   log_info(LGPFX" tX: addr=%s lbl='%s' val=%s BTC\n",
        addr, label, value);
 
    if (!b58_pubkey_is_valid(addr)) {
@@ -1239,9 +1239,9 @@ ncui_ncurses_init(void)
 {
    int y, x;
 
-   Log(LGPFX" using ncurses %s\n", curses_version());
+   log_info(LGPFX" using ncurses %s\n", curses_version());
    ncui_get_term_size(&y, &x);
-   Log(LGPFX" starting terminal dimension: %d x %d\n", y, x);
+   log_info(LGPFX" starting terminal dimension: %d x %d\n", y, x);
 
    initscr();
    savetty();
@@ -1279,9 +1279,9 @@ ncui_ncurses_init(void)
    start_color();
    use_default_colors();
 
-   Log(LGPFX" has_color() = %d -- can_change_color() = %d\n",
+   log_info(LGPFX" has_color() = %d -- can_change_color() = %d\n",
        has_colors(), can_change_color());
-   Log(LGPFX" COLORS = %d -- COLORPAIRS = %d\n", COLORS, COLOR_PAIRS);
+   log_info(LGPFX" COLORS = %d -- COLORPAIRS = %d\n", COLORS, COLOR_PAIRS);
 
    if (0 && can_change_color()) {
 #define ADJ(_x) (((_x) * 1000) / 256)

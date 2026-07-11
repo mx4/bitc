@@ -296,7 +296,7 @@ blockstore_validate_chkpt(const uint256 *hash,
          if (!uint256_issame(hash, &array[i].hash)) {
             char str[128];
             uint256_snprintf_reverse(str, sizeof str, hash);
-            Warning(LGPFX" chkpt validation failed. height=%u %s\n",
+            log_warn(LGPFX" chkpt validation failed. height=%u %s\n",
                     height, str);
             return 0;
          }
@@ -338,13 +338,13 @@ blockstore_set_chain_links(struct blockstore *bs,
        * entries from now on need to be made orphans.
        */
 
-      Log(LGPFX" Reached block %s\n", hashStr);
+      log_info(LGPFX" Reached block %s\n", hashStr);
 
       li = be->next;
       while (li) {
          hash256_calc(&li->header, sizeof li->header, &hash);
          uint256_snprintf_reverse(hashStr, sizeof hashStr, &hash);
-         Log(LGPFX" moving #%d %s from blk -> orphan\n", li->height, hashStr);
+         log_info(LGPFX" moving #%d %s from blk -> orphan\n", li->height, hashStr);
          s = hashtable_remove(bs->hash_blk, &hash, sizeof hash);
          ASSERT(s);
          li->height = -1;
@@ -363,7 +363,7 @@ blockstore_set_chain_links(struct blockstore *bs,
 
    be->height = 1 + blockstore_set_chain_links(bs, prev);
 
-   Log(LGPFX" moving #%d %s from orphan -> blk\n", be->height, hashStr);
+   log_info(LGPFX" moving #%d %s from orphan -> blk\n", be->height, hashStr);
 
    prev->next = be;
    be->prev = prev;
@@ -439,7 +439,7 @@ blockstore_set_best_chain(struct blockstore *bs,
    mutex_lock(bs->lock);
    height = blockstore_find_alternate_chain_height(bs, be);
 
-   Log(LGPFX" orphan block: alternate chain height is %d vs current %d\n",
+   log_info(LGPFX" orphan block: alternate chain height is %d vs current %d\n",
        height, bs->height);
 
    if (height <= bs->height) {
@@ -514,7 +514,7 @@ blockstore_add_entry(struct blockstore *bs,
       count = hashtable_getnumentries(bs->hash_orphans);
 
       uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
-      Log(LGPFX" block %s orphaned. %u orphan%s total.\n",
+      log_info(LGPFX" block %s orphaned. %u orphan%s total.\n",
           hashStr, count, count > 1 ? "s" : "");
 
       s = hashtable_insert(bs->hash_orphans, hash, sizeof *hash, be);
@@ -660,7 +660,7 @@ blockstore_write_headers(struct blockstore *bs)
    free(buf);
 
    if (res != 0 || numWritten != numhdr * sizeof *buf) {
-      Warning(LGPFX" failed to write %u block entries.\n", numhdr);
+      log_warn(LGPFX" failed to write %u block entries.\n", numhdr);
       return;
    }
 
@@ -764,7 +764,7 @@ blockset_open_file(struct blockstore *blockStore,
    if (bs->filesize > 0) {
       char *s = print_size(bs->filesize);
       char *name = file_getname(bs->filename);
-      Log(LGPFX" reading file %s -- %s -- %llu headers.\n",
+      log_info(LGPFX" reading file %s -- %s -- %llu headers.\n",
           name, s, bs->filesize / sizeof(btc_block_header));
       free(name);
       free(s);
@@ -827,9 +827,9 @@ blockset_open_file(struct blockstore *blockStore,
    char *latStr;
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, &blockStore->best_hash);
-   Log(LGPFX" loaded blocks up to %s\n", hashStr);
+   log_info(LGPFX" loaded blocks up to %s\n", hashStr);
    latStr = print_latency(ts);
-   Log(LGPFX" this took %s\n", latStr);
+   log_info(LGPFX" this took %s\n", latStr);
    free(latStr);
 
    return res;
@@ -896,7 +896,7 @@ blockstore_zap(struct config *config)
 
    file = blockstore_get_filename(config);
 
-   Warning(LGPFX" removing blockset '%s'.\n", file);
+   log_warn(LGPFX" removing blockset '%s'.\n", file);
    file_unlink(file);
    free(file);
 }
@@ -923,19 +923,19 @@ blockstore_init(struct config *config,
    *blockStore = NULL;
 
    file = blockstore_get_filename(config);
-   Log(LGPFX" Using headers at '%s.\n", file);
+   log_info(LGPFX" Using headers at '%s.\n", file);
    if (!file_exists(file)) {
-      Log(LGPFX" file '%s' does not exist. Creating..\n", file);
+      log_info(LGPFX" file '%s' does not exist. Creating..\n", file);
       res = file_create(file);
       if (res) {
-         Warning(LGPFX" failed to create file: %s\n",
+         log_warn(LGPFX" failed to create file: %s\n",
                  strerror(res));
          free(file);
          return res;
       }
       res = file_chmod(file, 0600);
       if (res != 0) {
-         Warning(LGPFX" failed to chmod 0600 '%s': %s\n", file,
+         log_warn(LGPFX" failed to chmod 0600 '%s': %s\n", file,
                  strerror(res));
          free(file);
          return res;
@@ -967,7 +967,7 @@ blockstore_init(struct config *config,
       ASSERT(s);
    }
    memcpy(&bs->genesis_hash.data, &array[0].hash.data, sizeof bs->genesis_hash);
-   Log(LGPFX" Genesis: %s\n", arrayStr[0].hashStr);
+   log_info(LGPFX" Genesis: %s\n", arrayStr[0].hashStr);
 
    res = blockset_open(bs, file);
    free(file);
@@ -975,7 +975,7 @@ blockstore_init(struct config *config,
       goto exit;
    }
 
-   Log(LGPFX" loaded %d headers.\n", bs->height + 1);
+   log_info(LGPFX" loaded %d headers.\n", bs->height + 1);
 
    bs->lock = mutex_alloc();
    *blockStore = bs;
@@ -1007,7 +1007,7 @@ blockstore_exit(struct blockstore *bs)
    blockstore_write_headers(bs);
 
    if (bs->height > 0) {
-      Log(LGPFX" closing blockstore w/ height=%d\n", bs->height);
+      log_info(LGPFX" closing blockstore w/ height=%d\n", bs->height);
    }
 
    blockset_close(bs->blockSet);
@@ -1049,7 +1049,7 @@ blockstore_get_hash_from_birth(const struct blockstore *bs,
 
          uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
          s = print_time_local(birth, "%c");
-         Log(LGPFX" birth %llu (%s) --> block %s.\n", ts, s, hashStr);
+         log_info(LGPFX" birth %llu (%s) --> block %s.\n", ts, s, hashStr);
          free(s);
          return;
       }
@@ -1059,7 +1059,7 @@ blockstore_get_hash_from_birth(const struct blockstore *bs,
     * headers.dat, or a birth older than the oldest stored header). Start the
     * scan from genesis rather than crashing.
     */
-   Log(LGPFX" birth %llu predates stored headers; starting from genesis.\n",
+   log_info(LGPFX" birth %llu predates stored headers; starting from genesis.\n",
        (unsigned long long)birth);
    memcpy(hash, &bs->genesis_hash, sizeof *hash);
 }

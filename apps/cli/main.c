@@ -186,7 +186,7 @@ bitc_encrypt_wallet(struct secure_area *pass_old,
    int res;
 
    if (pass_new == NULL) {
-      Warning("You need to specify a password.\n");
+      log_warn("You need to specify a password.\n");
       return 1;
    }
 
@@ -198,7 +198,7 @@ bitc_encrypt_wallet(struct secure_area *pass_old,
 
    res = wallet_encrypt(btc->wallet, pass_new);
    if (res) {
-      Warning("Failed to encrypt wallet.\n");
+      log_warn("Failed to encrypt wallet.\n");
    } else {
       printf("Done.\n");
    }
@@ -233,7 +233,7 @@ bitc_add_address(const char         *desc,
 
    res = wallet_add_key(btc->wallet, desc, btc_addr);
    if (res) {
-      Warning("Failed to add address to wallet.\n");
+      log_warn("Failed to add address to wallet.\n");
    }
 
    wallet_close(btc->wallet);
@@ -344,9 +344,9 @@ static void
 bitc_sigint_handler(int sig)
 {
    if (sig == SIGINT) {
-      Warning("CTRL-C received. Exiting..\n");
+      log_warn("CTRL-C received. Exiting..\n");
    } else {
-      Warning("Signal %u received. Exiting..\n", sig);
+      log_warn("Signal %u received. Exiting..\n", sig);
    }
    btc->stop = 2;
    bitc_req_notify();
@@ -369,7 +369,7 @@ bitc_openssl_init(void)
     * thread-safe, so the explicit SSL_library_init() call and the 1.0.x
     * locking/thread-id callbacks are no longer needed.
     */
-   Log(LGPFX" using %s\n", OpenSSL_version(OPENSSL_VERSION));
+   log_info(LGPFX" using %s\n", OpenSSL_version(OPENSSL_VERSION));
 }
 
 
@@ -405,7 +405,7 @@ bitc_check_create_file(const char *filename,
       return 0;
    }
 
-   Log(LGPFX" creating %s file: %s\n", label, filename);
+   log_info(LGPFX" creating %s file: %s\n", label, filename);
    res = file_create(filename);
    if (res) {
       printf("Failed to create %s file '%s': %s\n",
@@ -483,7 +483,7 @@ bitc_check_config(void)
    }
 
    if (!file_exists(dir)) {
-      Log(LGPFX" creating directory: %s\n", dir);
+      log_info(LGPFX" creating directory: %s\n", dir);
       res = file_mkdir(dir);
       if (res) {
          printf("Failed to create directory '%s': %s\n",
@@ -608,7 +608,7 @@ bitc_load_misc_config(void)
    path = config_getstring(btc->config, defaultPath, "contacts.filename");
    res = config_load(path, &btc->contactsCfg);
    if (res) {
-      Warning("Please create a minimal config: %s\n", path);
+      log_warn("Please create a minimal config: %s\n", path);
    }
    free(defaultPath);
    free(path);
@@ -620,7 +620,7 @@ bitc_load_misc_config(void)
    path = config_getstring(btc->config, defaultPath, "tx-labels.filename");
    res = config_load(path, &btc->txLabelsCfg);
    if (res) {
-      Warning("Please create a minimal config: %s\n", path);
+      log_warn("Please create a minimal config: %s\n", path);
    }
    free(defaultPath);
    free(path);
@@ -655,7 +655,7 @@ bitc_load_config(struct config **config,
    }
    res = config_load(path, config);
    if (res) {
-      Warning("Please create a minimal config: %s\n", path);
+      log_warn("Please create a minimal config: %s\n", path);
    }
    free(defaultPath);
    return res;
@@ -750,7 +750,7 @@ bitc_req_tx(struct btc_tx_desc *tx)
 {
    struct btc_req *req;
 
-   Log(LGPFX" requesting tx: %.8f BTC to %s.\n",
+   log_info(LGPFX" requesting tx: %.8f BTC to %s.\n",
        tx->total_value / ONE_BTC, tx->dst[0].addr);
    req = bitc_req_alloc(BTC_REQ_TX);
    req->clientData = tx;
@@ -771,7 +771,7 @@ bitc_req_stop(void)
 {
    struct btc_req *req;
 
-   Log(LGPFX" requesting exit.\n");
+   log_info(LGPFX" requesting exit.\n");
    /*
     * A bit of a hack. Let's set 'btc->stop' from the UI possibly, that way
     * lengthy functions can check this value if they need to abort their
@@ -800,7 +800,7 @@ bitc_transmit_tx(struct btc_tx_desc *tx_desc)
    ASSERT(tx_desc);
    btc_msg_tx_init(&tx);
 
-   Log(LGPFX" sending %.8f BTC to %s\n",
+   log_info(LGPFX" sending %.8f BTC to %s\n",
        tx_desc->total_value / ONE_BTC, tx_desc->dst[0].addr);
 
    if (tx_desc->fee == -1) {
@@ -837,7 +837,7 @@ bitc_process_events(void)
     * BITC_STATE_EXITING.
     */
    if (btc->stop == 2) {
-      Log(LGPFX" %s -- BITC_STATE_EXITING (CTRL-C)\n", __FUNCTION__);
+      log_info(LGPFX" %s -- BITC_STATE_EXITING (CTRL-C)\n", __FUNCTION__);
       btc->state = BITC_STATE_EXITING;
    }
 
@@ -847,22 +847,22 @@ bitc_process_events(void)
 
       req = CIRCLIST_CONTAINER(li, struct btc_req, item);
       circlist_delete_item(&btc->reqList, li);
-      Log(LGPFX" handling msg %d\n", req->type);
+      log_info(LGPFX" handling msg %d\n", req->type);
 
       switch (req->type) {
       case BTC_REQ_STOP:
-         Log(LGPFX" %s -- BITC_STATE_EXITING.\n", __FUNCTION__);
+         log_info(LGPFX" %s -- BITC_STATE_EXITING.\n", __FUNCTION__);
          btc->stop = 1;
          btc->state = BITC_STATE_EXITING;
          break;
       case BTC_REQ_TX:
-         Log(LGPFX" %s -- initiating tx.\n", __FUNCTION__);
+         log_info(LGPFX" %s -- initiating tx.\n", __FUNCTION__);
          struct btc_tx_desc *tx_desc = req->clientData;
          bitc_transmit_tx(tx_desc);
          free(tx_desc);
          break;
       default:
-         Warning(LGPFX" unhandled btc msg %d\n", req->type);
+         log_warn(LGPFX" unhandled btc msg %d\n", req->type);
          break;
       }
 
@@ -945,7 +945,7 @@ bitc_req_init(void)
    res = pipe(fd);
    if (res != 0) {
       res = errno;
-      Log(LGPFX" Failed to create pipe: %s\n", strerror(res));
+      log_info(LGPFX" Failed to create pipe: %s\n", strerror(res));
       return res;
    }
    btc->eventFd  = fd[0];
@@ -986,7 +986,7 @@ bitc_init(struct secure_area *passphrase,
 {
    int res;
 
-   Log(LGPFX" %s -- BITC_STATE_STARTING.\n", __FUNCTION__);
+   log_info(LGPFX" %s -- BITC_STATE_STARTING.\n", __FUNCTION__);
    btc->state = BITC_STATE_STARTING;
    btc->wallet_state = WALLET_UNKNOWN;
    btc->updateAndExit = updateAndExit;
@@ -1006,7 +1006,7 @@ bitc_init(struct secure_area *passphrase,
                                           9150,
 #endif
                                           "socks5.port");
-      Log(LGPFX" Using SOCKS5 proxy %s:%u.\n",
+      log_info(LGPFX" Using SOCKS5 proxy %s:%u.\n",
           btc->socks5_proxy, btc->socks5_port);
    }
 
@@ -1046,7 +1046,7 @@ bitc_init(struct secure_area *passphrase,
 static void
 bitc_exit(void)
 {
-   Log(LGPFX" %s\n", __FUNCTION__);
+   log_info(LGPFX" %s\n", __FUNCTION__);
    rpc_exit();
    peergroup_exit(btc->peerGroup);
    btc->peerGroup = NULL;
@@ -1079,14 +1079,14 @@ static void
 bitc_daemon(bool updateAndExit,
             int maxPeers)
 {
-   Warning(LGPFX" daemon running.\n");
+   log_warn(LGPFX" daemon running.\n");
    bitcui_set_status("connecting to peers..");
    peergroup_refill(TRUE /* init */);
 
    while (btc->stop == 0) {
       poll_runloop(btc->poll, &btc->stop);
    }
-   Warning(LGPFX" daemon stopped.\n");
+   log_warn(LGPFX" daemon stopped.\n");
 }
 
 
@@ -1201,12 +1201,12 @@ int main(int argc, char *argv[])
    }
 
    if (zap) {
-      Warning(LGPFX" zap: block-store, addrbook, txdb.\n");
+      log_warn(LGPFX" zap: block-store, addrbook, txdb.\n");
       blockstore_zap(btc->config);
       addrbook_zap(btc->config);
       wallet_zap_txdb(btc->config);
       peergroup_zap(btc->config);
-      Warning(LGPFX" zap: done.\n");
+      log_warn(LGPFX" zap: done.\n");
       Log_Exit();
       return 0;
    }

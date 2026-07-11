@@ -58,7 +58,7 @@ script_push_data(struct buff *buf,
 {
    ASSERT(buf->grow);
 
-   Log("%s: len=%zu / %#zx\n", __FUNCTION__, len, len);
+   log_info("%s: len=%zu / %#zx\n", __FUNCTION__, len, len);
 
    if (len < OP_PUSHDATA1) {
       serialize_uint8(buf, len);
@@ -105,7 +105,7 @@ script_sign_hash(struct wallet         *wallet,
    if (!s) {
       return 1;
    }
-   Log(LGPFX" siglen=%zu\n", siglen);
+   log_info(LGPFX" siglen=%zu\n", siglen);
 
    /*
     * Verify the signature is good. This code is new..
@@ -453,7 +453,7 @@ script_tx_sighash(struct wallet           *wallet,
    memset(hash, 0, sizeof *hash);
    tx2 = btc_msg_tx_dup(tx);
 
-   Log(LGPFX" Computing sighash for txi-%u/%llu\n", idx, tx2->in_count);
+   log_info(LGPFX" Computing sighash for txi-%u/%llu\n", idx, tx2->in_count);
 
    /*
     * Zero-out all the inputs' signatures.
@@ -570,7 +570,7 @@ script_push_pubkey(struct wallet *wallet,
 
    key_get_pubkey(k, &pkey, &pkeylen);
 
-   Log(LGPFX" pkeylen=%zu\n", pkeylen);
+   log_info(LGPFX" pkeylen=%zu\n", pkeylen);
    script_push_data(scriptSig, pkey, pkeylen);
    free(pkey);
 
@@ -618,7 +618,7 @@ script_sign(struct wallet               *wallet,
 
    switch (type) {
    case TX_PUBKEY:
-      Warning(LGPFX" script TX_PUBKEY\n");
+      log_warn(LGPFX" script TX_PUBKEY\n");
       NOT_IMPLEMENTED();
       break;
    case TX_PUBKEYHASH:
@@ -641,7 +641,7 @@ script_sign(struct wallet               *wallet,
       break;
    default:
       NOT_IMPLEMENTED();
-      Warning(LGPFX" script TX_NONSTANDARD\n");
+      log_warn(LGPFX" script TX_NONSTANDARD\n");
       break;
    }
 
@@ -687,7 +687,7 @@ script_parse_pubkey_hash(const uint8 *scriptPubKey,
 
    switch (type) {
    case TX_PUBKEY:
-      Warning(LGPFX" script TX_PUBKEY\n");
+      log_warn(LGPFX" script TX_PUBKEY\n");
       NOT_TESTED();
       hash160_calc(data, datalen, pubkey);
       break;

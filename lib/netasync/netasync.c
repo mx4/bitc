@@ -163,7 +163,7 @@ netasync_exit(void)
    char *s1 = print_size(netasync.sent);
 
    if (netasync.sockets > 0) {
-      Log(LGPFX" %u socks -- %llu / %s received -- %llu / %s sent.\n",
+      log_info(LGPFX" %u socks -- %llu / %s received -- %llu / %s sent.\n",
           netasync.sockets, netasync.received, s0, netasync.sent, s1);
    }
    free(s0);
@@ -433,10 +433,10 @@ netasync_bind(struct netasync_socket   *sock,
    if (sock->fd < 0) {
       sock->err = errno;
       if (sock->err == EMFILE || sock->err == ENFILE) {
-         Warning(LGPFX" Failed to create socket: EMNFILE: no more fd available.\n");
+         log_warn(LGPFX" Failed to create socket: EMNFILE: no more fd available.\n");
          Panic("EMNFILE.\n");
       } else {
-         Log(LGPFX" Failed to create socket: %s (%u)\n",
+         log_info(LGPFX" Failed to create socket: %s (%u)\n",
              strerror(sock->err), sock->err);
       }
       return sock->err;
@@ -445,14 +445,14 @@ netasync_bind(struct netasync_socket   *sock,
    res = bind(sock->fd, (struct sockaddr *)addr, sizeof *addr);
    if (res == -1) {
       sock->err = errno;
-      Log(LGPFX" failed to bind: %s (%d)\n", strerror(sock->err), sock->err);
+      log_info(LGPFX" failed to bind: %s (%d)\n", strerror(sock->err), sock->err);
       return sock->err;
    }
 
    res = listen(sock->fd, 100 /* backlog */);
    if (res == -1) {
       sock->err = errno;
-      Log(LGPFX" failed to listen: %s (%d)\n", strerror(sock->err), sock->err);
+      log_info(LGPFX" failed to listen: %s (%d)\n", strerror(sock->err), sock->err);
       return sock->err;
    }
 
@@ -538,7 +538,7 @@ netasync_getsocket_errno(const struct netasync_socket *sock)
 
    res = getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &err, &len);
    if (res < 0 || err != 0) {
-      Log(LGPFX" socket status: failure: %s (%d)\n", strerror(err), err);
+      log_info(LGPFX" socket status: failure: %s (%d)\n", strerror(err), err);
    }
    return err;
 }
@@ -620,7 +620,7 @@ netasync_socks_handler(struct netasync_socket *sock)
       buf = sock->socksRecvBuf;
 
       if (buf[0] != 5 || buf[1] != 0) {
-         Log(LGPFX" failed to proxy-connect: %02x %02x\n", buf[0], buf[1]);
+         log_info(LGPFX" failed to proxy-connect: %02x %02x\n", buf[0], buf[1]);
          sock->err = EINVAL;
          goto exit;
       }
@@ -649,12 +649,12 @@ netasync_socks_handler(struct netasync_socket *sock)
    case SOCKS_CONNECTED_REMOTE_RECV:
       buf = sock->socksRecvBuf;
       if (buf[0] != 5) {
-         Log(LGPFX" failed to accept request: %02x\n", buf[0]);
+         log_info(LGPFX" failed to accept request: %02x\n", buf[0]);
          sock->err = EINVAL;
          goto exit;
       }
       if (buf[1] != 0) {
-         Log(LGPFX" %s: socks5 proxy error: %s (%d)\n",
+         log_info(LGPFX" %s: socks5 proxy error: %s (%d)\n",
              sock->hostname, socks5_err2str(buf[1]), buf[1]);
          sock->err = EINVAL;
          goto exit;
@@ -707,11 +707,11 @@ netasync_connected(void *clientData)
       latStr = print_latency(lat);
 
       if (sock->err != 0) {
-         Log(LGPFX" failed to connect fd=%d to %s (%s) - %s (%d)\n",
+         log_info(LGPFX" failed to connect fd=%d to %s (%s) - %s (%d)\n",
              sock->fd, sock->hostname, latStr,
              strerror(sock->err), sock->err);
       } else {
-         Log(LGPFX" connected to %s fd=%d (%s)\n",
+         log_info(LGPFX" connected to %s fd=%d (%s)\n",
              sock->hostname, sock->fd, latStr);
       }
       free(latStr);
@@ -754,7 +754,7 @@ netasync_resolve(const char         *hostname,
 
    err = getaddrinfo(hostname, service, &hints, &addrs);
    if (err != 0) {
-      Log(LGPFX" Failed to resolve %s:%d : %s (%d)\n",
+      log_info(LGPFX" Failed to resolve %s:%d : %s (%d)\n",
           hostname, port, gai_strerror(err), err);
       return err;
    }
@@ -847,10 +847,10 @@ netasync_connect(struct netasync_socket   *sock,
    if (sock->fd < 0) {
       sock->err = errno;
       if (sock->err == EMFILE || sock->err == ENFILE) {
-         Warning(LGPFX" Failed to create socket: EMNFILE: no more fd available.\n");
+         log_warn(LGPFX" Failed to create socket: EMNFILE: no more fd available.\n");
          Panic("EMNFILE.\n");
       } else {
-         Log(LGPFX" Failed to create socket: %s (%u)\n",
+         log_info(LGPFX" Failed to create socket: %s (%u)\n",
              strerror(sock->err), sock->err);
       }
       goto exit;
@@ -882,7 +882,7 @@ netasync_connect(struct netasync_socket   *sock,
    }
    if (!cb || errno != EINPROGRESS) {
       sock->err = errno;
-      Log(LGPFX" Failed to connect: %s (%d)\n", strerror(sock->err), sock->err);
+      log_info(LGPFX" Failed to connect: %s (%d)\n", strerror(sock->err), sock->err);
       goto exit;
    }
 
@@ -979,14 +979,14 @@ netasync_receive_cb(void *clientData)
             break;
          }
          sock->err = res;
-         Log(LGPFX" %s: failed to read: %s (%d) -- numRead=%zu\n",
+         log_info(LGPFX" %s: failed to read: %s (%d) -- numRead=%zu\n",
              sock->hostname, strerror(res), res, numRead);
          netasync_fire_errorhandler(sock);
          return;
       }
       if (len == 0) {
          int err = netasync_getsocket_errno(sock);
-         Log(LGPFX" %s: socket closed by peer: %s (%d)\n",
+         log_info(LGPFX" %s: socket closed by peer: %s (%d)\n",
              sock->hostname, strerror(err), err);
          netasync_fire_errorhandler(sock);
          return;
@@ -1093,7 +1093,7 @@ netasync_send_ctx(struct netasync_socket   *sock,
 next:
    if (res < 0) {
       sock->err = errno;
-      Warning(LGPFX" %s: write(2) failed: %s (%d).\n",
+      log_warn(LGPFX" %s: write(2) failed: %s (%d).\n",
               sock->hostname, strerror(sock->err), sock->err);
       print_backtrace();
       ASSERT(sock->err != EBADF);

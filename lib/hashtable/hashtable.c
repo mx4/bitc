@@ -55,7 +55,7 @@ hashtable_printstats(const struct hashtable *ht,
       return;
    }
 
-   Log("HASH %s: count=%u maxdepth=%u empty=%u\n",
+   log_info("HASH %s: count=%u maxdepth=%u empty=%u\n",
        pfx, count, depth, empty);
 }
 
@@ -558,19 +558,19 @@ hashtable_insert_test(uint32 n,
    uint32 i;
    bool s;
 
-   Warning(LGPFX" adding %u entries.\n", n);
+   log_warn(LGPFX" adding %u entries.\n", n);
    for (i = 0; *stop == 0 && i < n; i++) {
       //uint32 r = random() % (1024 * 1024);
       uint32 r = i;
       s = hashtable_insert(ht, &r, sizeof r, NULL);
       ASSERT(s);
    }
-   Warning(LGPFX" stats: numEntries=%u maxDepth=%u emptyBuckets=%u\n",
+   log_warn(LGPFX" stats: numEntries=%u maxDepth=%u emptyBuckets=%u\n",
            hashtable_getnumentries(ht),
            hashtable_getmaxdepth(ht),
            hashtable_getemptybuckets(ht));
 
-   Warning(LGPFX" removing %u entries.\n",
+   log_warn(LGPFX" removing %u entries.\n",
            hashtable_getnumentries(ht));
 
    for (i = 0; *stop == 0 && i < n; i++) {
