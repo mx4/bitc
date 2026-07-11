@@ -591,9 +591,7 @@ exit:
 static void
 bitc_load_misc_config(void)
 {
-   char *defaultPath;
    char *dir;
-   char *path;
    int res;
 
    btc->resolve_peers = config_getbool(btc->config, 1, "resolve.peers");
@@ -603,26 +601,30 @@ bitc_load_misc_config(void)
    /*
     * contacts.
     */
-   defaultPath = safe_asprintf("%s/contacts.cfg", dir);
-   path = config_getstring(btc->config, defaultPath, "contacts.filename");
-   res = config_load(path, &btc->contactsCfg);
-   if (res) {
-      Warning("Please create a minimal config: %s\n", path);
+   {
+      char *defaultPath = safe_asprintf("%s/contacts.cfg", dir);
+      char *path = config_getstring(btc->config, defaultPath, "contacts.filename");
+      free(defaultPath);
+      res = config_load(path, &btc->contactsCfg);
+      if (res) {
+         Warning("Please create a minimal config: %s\n", path);
+      }
+      free(path);
    }
-   free(defaultPath);
-   free(path);
 
    /*
     * tx-label.
     */
-   defaultPath = safe_asprintf("%s/tx-labels.cfg", dir);
-   path = config_getstring(btc->config, defaultPath, "tx-labels.filename");
-   res = config_load(path, &btc->txLabelsCfg);
-   if (res) {
-      Warning("Please create a minimal config: %s\n", path);
+   {
+      char *defaultPath = safe_asprintf("%s/tx-labels.cfg", dir);
+      char *path = config_getstring(btc->config, defaultPath, "tx-labels.filename");
+      free(defaultPath);
+      res = config_load(path, &btc->txLabelsCfg);
+      if (res) {
+         Warning("Please create a minimal config: %s\n", path);
+      }
+      free(path);
    }
-   free(defaultPath);
-   free(path);
 
    free(dir);
 }
