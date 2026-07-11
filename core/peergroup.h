@@ -62,6 +62,7 @@ struct peergroup {
    int                   cfcheckptPeers;     /* number of peers we sent getcfcheckpt to */
    int                   cfcheckptAgreed;    /* number of peers that agreed */
    bool                  cfcheckptVerified;  /* true once at least one peer agreed */
+   bool                  cfhdrSyncStarted;   /* true once getcfheaders has been sent */
    bool                  useBip37;          /* legacy BIP37 fallback (default false) */
 };
 

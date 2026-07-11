@@ -253,7 +253,9 @@ blockstore_get_block_at_height(struct blockstore *bs,
    for (e = bs->best_chain; e != bs->genesis; e = e->prev)  {
       if (e->height == height) {
          hash256_calc(&e->header, sizeof e->header, hash);
-         *header = e->header;
+         if (header) {
+            *header = e->header;
+         }
          s = 1;
          break;
       }

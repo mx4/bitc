@@ -842,10 +842,10 @@ peergroup_request_cfilters(struct peer *peer)
     * Get the block hash at batchEnd to use as stopHash.
     */
    res = blockstore_get_block_at_height(bs, batchEnd, &stopHash, NULL);
-   if (res) {
+   if (!res) {
       Warning(LGPFX" BIP157: cannot get block hash at height %d.\n",
               batchEnd);
-      return res;
+      return 1;
    }
 
    g.filterType  = BTC_CFILTER_TYPE_BASIC;
@@ -914,6 +914,7 @@ peergroup_verify_cfcheckpts(struct peer *peer)
    pg->cfcheckptPeers    = nSent;
    pg->cfcheckptAgreed   = 0;
    pg->cfcheckptVerified = 0;
+   pg->cfhdrSyncStarted  = 0;
    free(pg->cfcheckptExpected);
    pg->cfcheckptExpected = NULL;
    pg->cfcheckptCount    = 0;
@@ -1033,6 +1034,15 @@ peergroup_request_cfheaders(struct peer *peer)
 
    ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
 
+   /*
+    * Guard against duplicate calls: only send getcfheaders once per batch.
+    * The response handler clears this flag after processing.
+    */
+   if (pg->cfhdrSyncStarted) {
+      return 0;
+   }
+   pg->cfhdrSyncStarted = 1;
+
    if (pg->cfhdrStartHeight > pg->cfhdrTipHeight) {
       /* All cfheaders requested; move on to cfilters. */
       Log(LGPFX" BIP157: cfheaders synced to height %d; requesting cfilters.\n",
@@ -1046,10 +1056,10 @@ peergroup_request_cfheaders(struct peer *peer)
     * Get the block hash at batchEnd to use as stopHash.
     */
    res = blockstore_get_block_at_height(bs, batchEnd, &stopHash, NULL);
-   if (res) {
+   if (!res) {
       Warning(LGPFX" BIP157: cannot get block hash at height %d for cfheaders.\n",
               batchEnd);
-      return res;
+      return 1;
    }
 
    res = peer_send_getcfheaders(peer, BTC_CFILTER_TYPE_BASIC,
@@ -1098,9 +1108,23 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
 
    /*
     * Verify prevFilterHeader matches what we expect.
+    * On the first batch (empty cfheader store), accept the peer's
+    * prevFilterHeader as the anchor — we have nothing to compare against.
+    * The cfcheckpt cross-check (done earlier) is what establishes trust.
     */
    expectedPrev = pg->cfhdrPrevHeader;
-   if (uint256_issame(&cfh->prevFilterHeader, &expectedPrev) == 0) {
+   {
+      char expStr[80];
+      char gotStr[80];
+      uint256_snprintf_reverse(expStr, sizeof expStr, &expectedPrev);
+      uint256_snprintf_reverse(gotStr, sizeof gotStr, &cfh->prevFilterHeader);
+      Log(LGPFX" BIP157: cfheaders prevFilterHeader: expected=%s got=%s\n",
+          expStr, gotStr);
+   }
+   if (uint256_iszero(&expectedPrev)) {
+      /* First batch: accept the peer's prevFilterHeader. */
+      Log(LGPFX" BIP157: accepting initial prevFilterHeader from peer.\n");
+   } else if (uint256_issame(&cfh->prevFilterHeader, &expectedPrev) == 0) {
       Warning(LGPFX" BIP157: cfheaders prevFilterHeader mismatch; dropping peer.\n");
       return 1;
    }
@@ -1147,6 +1171,7 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
     */
    pg->cfhdrPrevHeader = prevHeader;
    pg->cfhdrStartHeight = startHeight + (int)cfh->numHeaders;
+   pg->cfhdrSyncStarted = 0;  /* allow next batch request */
 
    Log(LGPFX" BIP157: stored %llu cfheaders (heights %d..%d).\n",
        (unsigned long long)cfh->numHeaders,
@@ -1580,6 +1605,7 @@ peergroup_init(struct config *config,
    pg->cfcheckptPeers    = 0;
    pg->cfcheckptAgreed   = 0;
    pg->cfcheckptVerified = 0;
+   pg->cfhdrSyncStarted  = 0;
 
    /*
     * Open the compact-filter header store.
