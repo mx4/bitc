@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include <arpa/inet.h>
 
 #include "peergroup.h"
@@ -745,6 +746,16 @@ peergroup_refill(bool init)
    uint32 numAddrs;
    uint32 max;
 
+   /*
+    * In connect-only mode we never draw peers from the address book; the sole
+    * peer is added exactly once by peergroup_seed() at startup. Re-seeding here
+    * would spawn duplicate connections while the first is still pending (and
+    * get us rate-limited by the peer), so do nothing.
+    */
+   if (btc->connectHost) {
+      return;
+   }
+
    numAddrs = addrbook_get_count(btc->book);
 
    if (numAddrs <= 2 * pg->active) {
@@ -950,6 +961,35 @@ peergroup_seed(void)
    int n;
 
    port = btc->testnet ? BTC_PORT_TESTNET : BTC_PORT_MAIN;
+
+   /*
+    * -C/--connect: talk only to an explicit, comma-separated list of peers and
+    * skip DNS seeds and the (possibly stale/polluted) address book entirely.
+    * Each entry is "host" or "host:port"; without a port the network default
+    * is used. Handy for iterating against known-good nodes without recompiling.
+    */
+   if (btc->connectHost) {
+      char *list = safe_strdup(btc->connectHost);
+      char *saveptr = NULL;
+      char *tok;
+
+      Log(LGPFX" connect-only mode: %s\n", btc->connectHost);
+      for (tok = strtok_r(list, ",", &saveptr); tok != NULL;
+           tok = strtok_r(NULL, ",", &saveptr)) {
+         uint16 hostport = port;
+         char *colon = strrchr(tok, ':');
+
+         if (colon) {
+            *colon = '\0';
+            hostport = atoi(colon + 1);
+         }
+         if (tok[0] != '\0') {
+            peergroup_add_peer_from_str(btc->poll, tok, hostport);
+         }
+      }
+      free(list);
+      return;
+   }
 
    n = config_getint64(btc->config, 0, "numstaticpeers");
    for (i = 0; i < n; i++) {

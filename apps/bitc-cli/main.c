@@ -295,6 +295,8 @@ bitc_usage(void)
           "Options:\n"
           " -a, --address                  generate new address, add to wallet\n"
           " -c, --config     <configPath>  config file to use, default: ~/.bitc/main.cfg\n"
+          " -C, --connect    <host[,..]>   connect only to these peers (host or host:port,\n"
+          "                                comma-separated); skips DNS seeds/addrbook\n"
           " -d, --daemon                   daemon mode: no-ui\n"
           " -h, --help                     show this help message\n"
           " -e, --encrypt                  encrypt the wallet file\n"
@@ -1114,6 +1116,7 @@ int main(int argc, char *argv[])
    static const struct option long_opts [] = {
       { "address",      no_argument,        0,  'a' },
       { "config",       required_argument,  0,  'c' },
+      { "connect",      required_argument,  0,  'C' },
       { "daemon",       no_argument,        0,  'd' },
       { "encrypt",      no_argument,        0,  'e' },
       { "help",         no_argument,        0,  'h' },
@@ -1129,11 +1132,12 @@ int main(int argc, char *argv[])
 
    bitc_signal_install();
 
-   while ((c = getopt_long(argc, argv, "a:c:dehn:pt:Tuvz",
+   while ((c = getopt_long(argc, argv, "a:c:C:dehn:pt:Tuvz",
                            long_opts, NULL)) != EOF) {
       switch (c) {
       case 'a': addr_label = optarg;     break;
       case 'c': configPath = optarg;     break;
+      case 'C': btc->connectHost = optarg; break;
       case 'd': withui = 0;              break;
       case 'e': encrypt = 1;             break;
       case 'n': maxPeers = atoi(optarg); break;

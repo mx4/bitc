@@ -56,6 +56,8 @@ struct BITCApp {
 
    char                    *socks5_proxy;
    uint16                   socks5_port;
+
+   char                    *connectHost;  /* -C: connect only to this peer */
 };
 
 extern struct BITCApp *btc;
