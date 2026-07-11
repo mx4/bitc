@@ -88,3 +88,22 @@ from multiple peers corrupts the shared counters). Sync loops `getheaders` until
 batch adds nothing new; it does **not** trust a peer's advertised `startingHeight`
 (monitoring nodes report 0 and are rejected/evicted). Checkpoints in
 `block-store.c` (`cpt_main`) only cover up to height ~275000.
+
+## Modernization roadmap
+
+Prioritized improvements:
+
+1. Harden parsers and make little-endian serialization explicit.
+2. Add comprehensive tests, sanitizers, fuzzing, and CI.
+3. Validate header proof of work, difficulty, timestamps, and chainwork.
+4. Make wallet accounting reorg-safe.
+5. Version persistence formats and support recovery.
+6. Replace BIP37 with BIP157/158 compact block filters.
+7. Add SegWit, Bech32m, and Taproot support.
+8. Migrate to versioned AEAD wallet encryption.
+9. Add descriptors, BIP32, and PSBT support.
+10. Improve peer diversity, addrv2, and eclipse resistance.
+11. Make execution contexts and thread ownership explicit.
+12. Enforce resource limits and replace unsafe assertions with robust error handling.
+
+Until consensus validation and reorg correctness are addressed, the current client should be considered experimental and not a secure wallet.
