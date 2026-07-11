@@ -47,14 +47,13 @@ MurmurHash3 (public domain) is bundled under `ext/src/`.
 
 #### Install
 
-##### Ubuntu 13.10, Saucy Salamander
+##### Linux (Debian / Ubuntu)
 
-You first need to install the libraries this app uses:
+You first need to install the build tools and libraries this app uses:
 ```
-   # sudo apt-get install git make clang libssl-dev
-   # sudo apt-get install libcurl4-openssl-dev libncurses5-dev
-   # sudo apt-get install libleveldb-dev libsnappy-dev
-   # sudo apt-get install libstdc++-4.8-dev
+   # sudo apt-get install git make clang pkg-config
+   # sudo apt-get install libssl-dev libcurl4-openssl-dev libncurses-dev
+   # sudo apt-get install libleveldb-dev libsnappy-dev libcjson-dev
 ```
 
 then clone the git repository:
@@ -68,9 +67,17 @@ finally build and launch:
    # ./bitc
 ```
 
-##### Mac OS
+##### macOS
 
-  You need to install libcurl, leveldb, libsnappy and ncurses via `port` or `brew`.
+Install the dependencies via `brew` (or `port`):
+```
+   # brew install pkg-config openssl leveldb snappy curl ncurses cjson
+```
+then build and launch:
+```
+   # cd bitc && make
+   # ./bitc
+```
 
 ---
 
