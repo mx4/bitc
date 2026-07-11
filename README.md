@@ -26,14 +26,22 @@ bitc is a *thin* SPV bitcoin client.
 
 #### Dependencies
 
- - cJSON: a C library to parse JSON objects. It's released under MIT license.
-        http://sourceforge.net/projects/cjson/
- - libcurl: an http library. It's released under a MIT/X derivate license.  
-	http://curl.haxx.se/libcurl/
- - LevelDB: Google's key value store, released under the BSD 3-Clause License.  
-	https://github.com/google/leveldb
- - OpenSSL: crypto library.  
-        https://www.openssl.org/
+These are discovered at build time via `pkg-config`, so install them with your
+package manager (e.g. `brew install openssl leveldb snappy curl cjson pkg-config`
+on macOS, or the matching `-dev` packages on Debian/Ubuntu:
+`libssl-dev libleveldb-dev libsnappy-dev libcurl4-openssl-dev libncurses-dev
+libcjson-dev pkg-config`).
+
+ - OpenSSL: crypto library (EC keys, ECDSA, AES), used via the OpenSSL 3 EVP
+   API. https://www.openssl.org/
+ - LevelDB: Google's key/value store for the transaction db, BSD 3-Clause.
+   https://github.com/google/leveldb (with Snappy for compression).
+ - libcurl: HTTP client (fx rates, ip info), MIT/X derivative.
+   https://curl.se/libcurl/
+ - ncurses (with panel/form): the console UI.
+ - cJSON: JSON parser, MIT. https://github.com/DaveGamble/cJSON
+
+MurmurHash3 (public domain) is bundled under `ext/src/`.
 
 ---
 
