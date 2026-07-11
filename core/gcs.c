@@ -43,6 +43,7 @@ siphash_2_4(const uint8 key[16],
    struct siphash_state s;
    uint64 k0, k1;
    uint64 b;
+   size_t total_len = len;
 
    k0 = ((uint64)key[0])       | ((uint64)key[1] << 8)  |
         ((uint64)key[2] << 16) | ((uint64)key[3] << 24) |
@@ -71,7 +72,11 @@ siphash_2_4(const uint8 key[16],
       len -= 8;
    }
 
-   b = (uint64)len << 56;
+   /*
+    * The final block's top byte holds the total message length mod 256,
+    * NOT the trailing remainder. (len has been decremented by the loop.)
+    */
+   b = (uint64)(total_len & 0xff) << 56;
    switch (len) {
    case 7: b |= (uint64)data[6] << 48; /* fallthrough */
    case 6: b |= (uint64)data[5] << 40; /* fallthrough */
@@ -119,7 +124,8 @@ gcs_self_test(void)
       0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
    };
-   uint64 expected = 0x979b0e908e5006e7ULL;
+   /* Canonical SipHash-2-4 vector for the 15-byte message 00..0e. */
+   uint64 expected = 0xa129ca6149be45e5ULL;
    uint64 got;
 
    got = siphash_2_4(key, data, sizeof data);

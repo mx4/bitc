@@ -58,6 +58,7 @@ struct BITCApp {
 
    char                    *connectHost;  /* -C: connect only to this peer */
    bool                     syncAndExit;  /* --sync-and-exit: quit after headers */
+   int                      stopAfterHeight; /* --stop-after-height: quit after cfilter scan passes this height */
 };
 
 extern struct BITCApp *btc;

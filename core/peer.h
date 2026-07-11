@@ -17,6 +17,7 @@ int  peer_getinfo(struct circlist_item *item, struct bitcui_peer *pinfo);
 uint64 peer_get_services(struct circlist_item *li);
 bool peer_is_connected(struct circlist_item *li);
 struct peer *peer_from_li(struct circlist_item *li);
+struct circlist_item *peer_get_item(struct peer *peer);
 int  peer_on_ready(struct peer *peer);
 int  peer_on_ready_li(struct circlist_item *li);
 

@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <limits.h>
+#include <errno.h>
 #include <arpa/inet.h>
 
 #include "peergroup.h"
@@ -313,6 +314,9 @@ peergroup_download_progress(void)
 {
    struct peergroup *pg = btc->peerGroup;
 
+   /* Any call here means the sync just made forward progress. */
+   pg->lastProgressTS = time_get();
+
    /*
     * In the BIP157 path, report cfilter scan progress (how many cfilters
     * have been verified) instead of the legacy numFetched/numToFetch
@@ -526,6 +530,26 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    peergroup_download_progress();
 
    /*
+    * --stop-after-height: once the scan passes the given height, stop
+    * requesting new cfilters. But defer the actual stop until any matched
+    * full blocks still in flight have been received and processed, so we
+    * don't miss the very transaction we were scanning for.
+    */
+   if (btc->stopAfterHeight > 0 && blockHeight >= btc->stopAfterHeight) {
+      if (!btc->peerGroup->cfStopRequested) {
+         Warning(LGPFX" BIP157: reached stop-after-height %d; "
+                 "draining %d pending block(s).\n",
+                 btc->stopAfterHeight, btc->peerGroup->cfBlocksPending);
+         btc->peerGroup->cfStopRequested = 1;
+      }
+      if (btc->peerGroup->cfBlocksPending == 0) {
+         peergroup_download_complete();
+         bitc_req_stop();
+      }
+      return 0;
+   }
+
+   /*
     * GCS-match the filter against the wallet's scriptPubKeys.
     */
    wallet_get_filter_scripts(btc->wallet, &scripts, &scriptLens, &numScripts);
@@ -554,6 +578,7 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
       Log(LGPFX" BIP157: cfilter match at height %d; requesting full block.\n",
           blockHeight);
       pg->numFetched++;
+      pg->cfBlocksPending++;
       return peer_send_getdata(peer, INV_TYPE_MSG_BLOCK, &blockHash, 1);
    }
 
@@ -697,6 +722,19 @@ peergroup_download_filtered_blocks(struct peer *peer)
    ASSERT(btc->state == BITC_STATE_UPDATE_HEADERS ||
           btc->state == BITC_STATE_UPDATE_TXDB);
 
+   /*
+    * Only one peer drives cfheader/cfilter sync at a time, exactly like
+    * header sync below. Without this guard, every peer that completes its
+    * handshake while we're in BITC_STATE_UPDATE_TXDB independently calls in
+    * here and races the scan forward (cfScanHeight/cfhdrStartHeight get
+    * bumped by each one), corrupting the shared progress counters.
+    */
+   if (pg->downloadPeer == NULL) {
+      pg->downloadPeer = peer;
+   } else if (pg->downloadPeer != peer) {
+      return 0;
+   }
+
    first = btc->state == BITC_STATE_UPDATE_HEADERS;
 
    if (first && pg->numHdrToFetch > 0) {
@@ -725,10 +763,18 @@ peergroup_download_filtered_blocks(struct peer *peer)
    /*
     * - Get hash of the wallet birth.
     * - Get the hash of the last block processed.
+    *
+    * Normally we start from the younger of the two (so we don't re-scan
+    * blocks we've already processed). But with --stop-after-height, always
+    * start from the wallet birth so we re-scan from the beginning for testing.
     */
    birth = wallet_get_birth(btc->wallet);
    blockstore_get_hash_from_birth(bs, birth, &walletHash);
-   peergroup_get_lastblk(pg, &lastHashStore);
+   if (btc->stopAfterHeight > 0) {
+      lastHashStore = walletHash;
+   } else {
+      peergroup_get_lastblk(pg, &lastHashStore);
+   }
 
    /*
     * Get the youngest of the two.
@@ -1127,14 +1173,6 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
     * The cfcheckpt cross-check (done earlier) is what establishes trust.
     */
    expectedPrev = pg->cfhdrPrevHeader;
-   {
-      char expStr[80];
-      char gotStr[80];
-      uint256_snprintf_reverse(expStr, sizeof expStr, &expectedPrev);
-      uint256_snprintf_reverse(gotStr, sizeof gotStr, &cfh->prevFilterHeader);
-      Log(LGPFX" BIP157: cfheaders prevFilterHeader: expected=%s got=%s\n",
-          expStr, gotStr);
-   }
    if (uint256_iszero(&expectedPrev)) {
       /* First batch: accept the peer's prevFilterHeader. */
       Log(LGPFX" BIP157: accepting initial prevFilterHeader from peer.\n");
@@ -1337,6 +1375,21 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
                 (unsigned long long)i, blockHeight);
       }
       buff_free(txBuf);
+   }
+
+   /*
+    * This block was fetched because its cfilter matched. Account for it and,
+    * if --stop-after-height was requested and this was the last in-flight
+    * block, stop now (the tx we were scanning for has been processed).
+    */
+   if (pg->cfBlocksPending > 0) {
+      pg->cfBlocksPending--;
+   }
+   if (pg->cfStopRequested && pg->cfBlocksPending == 0) {
+      Warning(LGPFX" BIP157: matched blocks drained; stopping.\n");
+      peergroup_download_complete();
+      bitc_req_stop();
+      return 0;
    }
 
    /*
@@ -1570,6 +1623,71 @@ peergroup_check_liveness(void)
  *-------------------------------------------------------------------------
  */
 
+/*
+ *-------------------------------------------------------------------------
+ *
+ * peergroup_check_download_stall --
+ *
+ *      During header/cfilter sync a single downloadPeer drives progress.
+ *      If that peer stops responding, the whole sync hangs with no timeout.
+ *      Detect a stall (no forward progress for a few seconds) and drop the
+ *      download peer so another connected peer can take over.
+ *
+ *-------------------------------------------------------------------------
+ */
+/*
+ * peergroup_periodic_cb (which calls this) runs every 15s (see
+ * peergroup_init's periodUsec in main.c), so the detection latency is bounded
+ * by that period, not by this threshold. Set below the tick period so a
+ * genuine stall is always caught on the very next tick.
+ */
+#define SYNC_STALL_USEC (10 * 1000 * 1000)  /* 10 seconds */
+
+static void
+peergroup_check_download_stall(void)
+{
+   struct peergroup *pg = btc->peerGroup;
+   struct peer *dp = pg->downloadPeer;
+   mtime_t now;
+
+   /*
+    * Only watch for a stall during header sync, where a single downloadPeer
+    * is the sole driver by construction (see peergroup_download_headers).
+    * Once we move past BITC_STATE_UPDATE_HEADERS, cfcheckpt verification and
+    * cfilter/block fetching can legitimately hand control between several
+    * NODE_COMPACT_FILTERS peers, so downloadPeer is no longer guaranteed to
+    * be the peer actually making progress -- killing it in that phase can
+    * destroy an innocent, uninvolved peer instead of the one that's stuck.
+    */
+   if (dp == NULL || btc->state != BITC_STATE_UPDATE_HEADERS ||
+       bitc_exiting()) {
+      return;
+   }
+   if (pg->lastProgressTS == 0) {
+      pg->lastProgressTS = time_get();
+      return;
+   }
+
+   now = time_get();
+   if (now - pg->lastProgressTS < SYNC_STALL_USEC) {
+      return;
+   }
+
+   Warning(LGPFX" sync stalled for %llu ms; dropping download peer %s.\n",
+           (unsigned long long)((now - pg->lastProgressTS) / 1000),
+           peer_name(dp));
+
+   /*
+    * Reset the stall timer and destroy the peer. peer_destroy() clears
+    * pg->downloadPeer, so the next connected peer becomes the download peer
+    * (peergroup_refill tops up the active set). The next handshake_ok / the
+    * refill loop restarts the appropriate sync phase.
+    */
+   pg->lastProgressTS = now;
+   peer_destroy(peer_get_item(dp), ETIMEDOUT);
+}
+
+
 static void
 peergroup_periodic_cb(void *clientData)
 {
@@ -1578,6 +1696,7 @@ peergroup_periodic_cb(void *clientData)
    }
    peergroup_refill(FALSE);
    peergroup_check_liveness();
+   peergroup_check_download_stall();
 }
 
 

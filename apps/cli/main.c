@@ -246,21 +246,6 @@ bitc_add_address(const char         *desc,
 /*
  *---------------------------------------------------------------------
  *
- * bitc_bye --
- *
- *---------------------------------------------------------------------
- */
-
-static void
-bitc_bye(void)
-{
-   printf("Contribute! https://github.com/bit-c/bitc\n");
-}
-
-
-/*
- *---------------------------------------------------------------------
- *
  * bitc_version_and_exit --
  *
  *---------------------------------------------------------------------
@@ -283,6 +268,21 @@ bitc_version_and_exit(void)
 /*
  *---------------------------------------------------------------------
  *
+ * bitc_bye --
+ *
+ *---------------------------------------------------------------------
+ */
+
+static void
+bitc_bye(void)
+{
+   printf("Contribute! https://github.com/bit-c/bitc\n");
+}
+
+
+/*
+ *---------------------------------------------------------------------
+ *
  * bitc_usage --
  *
  *---------------------------------------------------------------------
@@ -299,6 +299,7 @@ bitc_usage(void)
           "                                comma-separated); skips DNS seeds/addrbook\n"
           " -d, --daemon                   daemon mode: no-ui\n"
           " -S, --sync-and-exit            exit as soon as headers are synced (for timing)\n"
+          " -x, --stop-after-height <h>     exit after cfilter scan passes height h (for testing)\n"
           " -h, --help                     show this help message\n"
           " -e, --encrypt                  encrypt the wallet file\n"
           " -n, --numPeers   <maxPeers>    number of peers to connect to, default is 5\n"
@@ -1120,6 +1121,7 @@ int main(int argc, char *argv[])
       { "connect",      required_argument,  0,  'C' },
       { "daemon",       no_argument,        0,  'd' },
       { "sync-and-exit", no_argument,       0,  'S' },
+      { "stop-after-height", required_argument, 0, 'x' },
       { "encrypt",      no_argument,        0,  'e' },
       { "help",         no_argument,        0,  'h' },
       { "numPeers",     required_argument,  0,  'n' },
@@ -1134,13 +1136,14 @@ int main(int argc, char *argv[])
 
    bitc_signal_install();
 
-   while ((c = getopt_long(argc, argv, "a:c:C:dehn:pt:STuvz",
+   while ((c = getopt_long(argc, argv, "a:c:C:dehn:pt:STuvzx:",
                            long_opts, NULL)) != EOF) {
       switch (c) {
       case 'a': addr_label = optarg;     break;
       case 'c': configPath = optarg;     break;
       case 'C': btc->connectHost = optarg; break;
       case 'S': btc->syncAndExit = 1;    break;
+      case 'x': btc->stopAfterHeight = atoi(optarg); break;
       case 'd': withui = 0;              break;
       case 'e': encrypt = 1;             break;
       case 'n': maxPeers = atoi(optarg); break;

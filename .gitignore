@@ -5,6 +5,7 @@ gmon*
 *.swp
 bitc
 fuzz-parse
+test-gcs
 compile_commands.json
 lldb
 tags

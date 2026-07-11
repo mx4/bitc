@@ -1074,10 +1074,17 @@ peer_handle_version(struct peer *peer)
    /*
     * We need peers that serve historical blocks so we can fetch the ones our
     * filters match. NODE_NETWORK_LIMITED (BIP159) peers only keep the last
-    * ~288 blocks, which is not enough for an initial sync.
+    * ~288 blocks (~2 days), which is nowhere near enough for an initial scan
+    * from the wallet's birth height -- and such peers commonly still set
+    * NODE_NETWORK alongside NODE_NETWORK_LIMITED, so checking for the
+    * absence of NODE_NETWORK alone is not sufficient: we must also reject
+    * peers that advertise NODE_NETWORK_LIMITED, since a getdata(MSG_BLOCK)
+    * for an old block will otherwise silently go unanswered forever.
     */
-   if ((version.services & BTC_SERVICE_NODE_NETWORK) == 0) {
-      Warning(LGPFX" %s: node does not serve full blocks (services=%#llx, %s).\n",
+   if ((version.services & BTC_SERVICE_NODE_NETWORK) == 0 ||
+       (version.services & BTC_SERVICE_NODE_NETWORK_LIMITED)) {
+      Warning(LGPFX" %s: node does not serve full historical blocks "
+              "(services=%#llx, %s).\n",
               peer->name, (unsigned long long)version.services, peer->clientStr);
       return 1;
    }
@@ -1571,6 +1578,21 @@ struct peer *
 peer_from_li(struct circlist_item *li)
 {
    return GET_PEER(li);
+}
+
+
+/*
+ *-------------------------------------------------------------------------
+ *
+ * peer_get_item --
+ *
+ *-------------------------------------------------------------------------
+ */
+struct circlist_item *
+peer_get_item(struct peer *peer)
+{
+   ASSERT(peer->magic == PEER_MAGIC);
+   return &peer->item;
 }
 
 
