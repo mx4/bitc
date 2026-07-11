@@ -86,7 +86,8 @@ fuzz_one(uint8 *bytes, size_t len)
 #define WRAP() buff_init(&b, bytes, len)
    { WRAP(); btc_msg_version v; btcmsg_parse_version(&b, &v); }
    { WRAP(); uint64 nonce; btcmsg_parse_pingpong(BTC_PROTO_VERSION, &b, &nonce); }
-   { WRAP(); btcmsg_parse_notfound(&b); }
+   { WRAP(); uint256 *bh = NULL; int nbh = 0;
+     if (btcmsg_parse_notfound(&b, &bh, &nbh) == 0) free(bh); }
    { WRAP(); btcmsg_parse_alert(&b); }
    { WRAP(); btc_msg_inv *inv = NULL; int n = 0;
      if (btcmsg_parse_inv(&b, &inv, &n) == 0) free(inv); }

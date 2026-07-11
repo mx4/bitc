@@ -334,11 +334,22 @@ btcmsg_payload_valid(const struct buff *buf,
  */
 
 int
-btcmsg_parse_notfound(struct buff *buf)
+btcmsg_parse_notfound(struct buff *buf,
+                     uint256     **blockHashesOut,
+                     int          *numBlockHashesOut)
 {
+   uint256 *blockHashes = NULL;
+   int numBlockHashes = 0;
    uint64 n;
    uint64 i;
    int res;
+
+   if (blockHashesOut) {
+      *blockHashesOut = NULL;
+   }
+   if (numBlockHashesOut) {
+      *numBlockHashesOut = 0;
+   }
 
    res = deserialize_varint(buf, &n);
    if (res) {
@@ -351,21 +362,40 @@ btcmsg_parse_notfound(struct buff *buf)
       return 1;
    }
 
+   if (blockHashesOut && n > 0) {
+      blockHashes = safe_calloc(n, sizeof *blockHashes);
+   }
+
    for (i = 0; i < n; i++) {
       char str[128];
       btc_msg_inv inv;
 
       res = deserialize_inv(buf, &inv);
       if (res) {
+         free(blockHashes);
          return res;
       }
 
       uint256_snprintf_reverse(str, sizeof str, &inv.hash);
       Warning(LGPFX" NOTFOUND: inv: %s %s\n", str, btc_inv_type2str(inv.type));
+
+      if (blockHashes && inv.type == INV_TYPE_MSG_BLOCK) {
+         blockHashes[numBlockHashes++] = inv.hash;
+      }
    }
 
    if (buff_space_left(buf) != 0) {
+      free(blockHashes);
       return 1;
+   }
+
+   if (blockHashesOut) {
+      *blockHashesOut = blockHashes;
+   } else {
+      free(blockHashes);
+   }
+   if (numBlockHashesOut) {
+      *numBlockHashesOut = numBlockHashes;
    }
 
    return res;

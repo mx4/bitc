@@ -2,6 +2,10 @@
 # Test helper: run bitc with --stop-after-height and poll for completion,
 # exiting as soon as the daemon stops instead of sleeping a fixed duration.
 #
+# NOTE: this script passes -n 30 to widen the peer pool for faster test
+# turnaround. bitc's own shipped default (when run without -n) is still 5,
+# unchanged from upstream.
+#
 # Usage: ./run-test.sh <stop-height> [max-seconds]
 
 set -e

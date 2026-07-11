@@ -35,7 +35,8 @@ int btcmsg_craft_getdata(struct buff **bufOut, enum btc_inv_type type,
 int btcmsg_craft_inv(struct buff **bufOut, enum btc_inv_type type,
                      const uint256 *hash, int n);
 
-int btcmsg_parse_notfound(struct buff *buf);
+int btcmsg_parse_notfound(struct buff *buf, uint256 **blockHashesOut,
+                         int *numBlockHashesOut);
 int btcmsg_parse_version(struct buff *buf, btc_msg_version *version);
 int btcmsg_parse_alert(struct buff *buf);
 int btcmsg_parse_pingpong(uint32 protversion, struct buff *buf, uint64 *nonce);

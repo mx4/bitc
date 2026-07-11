@@ -25,10 +25,23 @@
 
 #define LGPFX   "PEERG:"
 
+/*
+ * peergroup_periodic_cb runs every 15s (see peergroup_init's periodUsec in
+ * main.c), so for the header-sync stall detector the detection latency is
+ * bounded by that period, not by this threshold; it is set below the tick
+ * period so a genuine stall is always caught on the very next tick. For
+ * pending-block-fetch retries (peergroup_check_pending_blocks), it is simply
+ * the maximum time to wait for a getdata(MSG_BLOCK) response before trying a
+ * different peer.
+ */
+#define SYNC_STALL_USEC (10 * 1000 * 1000)  /* 10 seconds */
+
 /* Forward declarations. */
 static int peergroup_request_cfilters(struct peer *peer);
 static int peergroup_request_cfheaders(struct peer *peer);
 static int peergroup_verify_cfcheckpts(struct peer *peer);
+static void peergroup_add_pending_block(const uint256 *hash, struct peer *from);
+static void peergroup_remove_pending_block(const uint256 *hash);
 
 
 struct tx_broadcast {
@@ -578,7 +591,7 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
       Log(LGPFX" BIP157: cfilter match at height %d; requesting full block.\n",
           blockHeight);
       pg->numFetched++;
-      pg->cfBlocksPending++;
+      peergroup_add_pending_block(&blockHash, peer);
       return peer_send_getdata(peer, INV_TYPE_MSG_BLOCK, &blockHash, 1);
    }
 
@@ -616,6 +629,116 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    }
 
    return 0;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_add_pending_block --
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_add_pending_block(const uint256 *hash, struct peer *from)
+{
+   struct peergroup *pg = btc->peerGroup;
+
+   if (pg->cfBlocksPending >= pg->cfPendingCap) {
+      pg->cfPendingCap = pg->cfPendingCap ? pg->cfPendingCap * 2 : 8;
+      pg->cfPending = safe_realloc(pg->cfPending,
+                                   pg->cfPendingCap * sizeof *pg->cfPending);
+   }
+   pg->cfPending[pg->cfBlocksPending].hash          = *hash;
+   pg->cfPending[pg->cfBlocksPending].requestedFrom = from;
+   pg->cfPending[pg->cfBlocksPending].requestTS     = time_get();
+   pg->cfBlocksPending++;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_remove_pending_block --
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_remove_pending_block(const uint256 *hash)
+{
+   struct peergroup *pg = btc->peerGroup;
+   int i;
+
+   for (i = 0; i < pg->cfBlocksPending; i++) {
+      if (uint256_issame(&pg->cfPending[i].hash, hash)) {
+         pg->cfPending[i] = pg->cfPending[pg->cfBlocksPending - 1];
+         pg->cfBlocksPending--;
+         return;
+      }
+   }
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_check_pending_blocks --
+ *
+ *      Periodic check: any matched-block getdata still outstanding after
+ *      SYNC_STALL_USEC is retried against a different connected peer. Many
+ *      NODE_NETWORK_LIMITED peers neither serve nor send 'notfound' for an
+ *      old block they no longer hold, so a timeout is the only reliable
+ *      signal here (unlike a real protocol-level notfound response, which
+ *      is handled separately in peer_handle_notfound).
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_check_pending_blocks(void)
+{
+   struct peergroup *pg = btc->peerGroup;
+   mtime_t now = time_get();
+   uint256 expiredHash[64];
+   struct peer *expiredFrom[64];
+   int numExpired = 0;
+   int i;
+
+   /*
+    * Read-only scan: collect entries that expired *before* this call (all
+    * requestTS values here were set on a prior call/request, strictly
+    * earlier than 'now'), without mutating pg->cfPending. Entries added by
+    * a retry are only ever added after this scan completes, so there is no
+    * risk of computing 'now - freshlyAddedTS' and underflowing the unsigned
+    * mtime_t subtraction (which previously caused an immediate, unbounded
+    * retry storm against the same couple of peers).
+    */
+   for (i = 0; i < pg->cfBlocksPending && numExpired < (int)ARRAYSIZE(expiredHash); i++) {
+      struct cf_pending_block *p = &pg->cfPending[i];
+
+      if (now < p->requestTS || now - p->requestTS < SYNC_STALL_USEC) {
+         continue;
+      }
+      expiredHash[numExpired] = p->hash;
+      expiredFrom[numExpired] = p->requestedFrom;
+      numExpired++;
+   }
+
+   /*
+    * Second pass: now that the scan is done, remove and retry each expired
+    * entry. peergroup_retry_block_fetch may append new pending entries, but
+    * that can no longer interfere since we're iterating our own snapshot,
+    * not pg->cfPending directly.
+    */
+   for (i = 0; i < numExpired; i++) {
+      char hashStr[80];
+
+      uint256_snprintf_reverse(hashStr, sizeof hashStr, &expiredHash[i]);
+      Warning(LGPFX" BIP157: getdata(MSG_BLOCK) for %s timed out; "
+              "retrying against another peer.\n", hashStr);
+
+      peergroup_remove_pending_block(&expiredHash[i]);
+      peergroup_retry_block_fetch(expiredFrom[i], &expiredHash[i], 1);
+   }
 }
 
 
@@ -1003,6 +1126,88 @@ peergroup_verify_cfcheckpts(struct peer *peer)
  *
  *------------------------------------------------------------------------
  */
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_cfcheckpt_maybe_complete --
+ *
+ *      Shared completion check for cfcheckpt verification: once we've heard
+ *      from every peer we sent getcfcheckpt to (or that count has been
+ *      revised down because some disconnected before responding -- see
+ *      peergroup_notify_peer_gone), and at least one agreed, proceed to
+ *      cfheader sync using 'driver' (which must be a currently connected,
+ *      already-responded peer).
+ *
+ *------------------------------------------------------------------------
+ */
+static int
+peergroup_cfcheckpt_maybe_complete(struct peer *driver)
+{
+   struct peergroup *pg = btc->peerGroup;
+
+   if (pg->cfcheckptVerified) {
+      return 0;
+   }
+   if (pg->cfcheckptAgreed >= 1 && pg->cfcheckptAgreed >= pg->cfcheckptPeers) {
+      pg->cfcheckptVerified = 1;
+      Log(LGPFX" BIP157: cfcheckpt verified by %d peer%s; starting cfheader sync.\n",
+          pg->cfcheckptAgreed, pg->cfcheckptAgreed > 1 ? "s" : "");
+      return peergroup_request_cfheaders(driver);
+   }
+   return 0;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_notify_peer_gone --
+ *
+ *      Called from peer_destroy() for every disconnecting peer. If we are
+ *      still waiting on cfcheckpt responses and this peer was one we sent
+ *      getcfcheckpt to but never heard back from, a permanently unmet
+ *      target (cfcheckptAgreed can never reach the original cfcheckptPeers)
+ *      would wedge the sync forever. We can't tell precisely which pending
+ *      peers this one was, so conservatively lower the target by one: this
+ *      may occasionally let verification proceed with fewer confirmations
+ *      than originally intended, which is a correct and safe trade-off
+ *      against hanging indefinitely.
+ *
+ *------------------------------------------------------------------------
+ */
+void
+peergroup_notify_peer_gone(struct peer *peer)
+{
+   struct peergroup *pg = btc->peerGroup;
+   struct circlist_item *li;
+
+   if (pg == NULL || pg->cfcheckptVerified || pg->cfcheckptPeers == 0) {
+      return;
+   }
+   if (pg->cfcheckptAgreed >= pg->cfcheckptPeers) {
+      return;
+   }
+
+   pg->cfcheckptPeers--;
+   Warning(LGPFX" BIP157: %s gone while awaiting cfcheckpt; "
+           "lowering target to %d.\n", peer_name(peer), pg->cfcheckptPeers);
+
+   if (pg->cfcheckptAgreed < 1) {
+      /* Nobody has responded yet; nothing to drive cfheader sync with. */
+      return;
+   }
+
+   /* Use any other connected peer as the driver for the next step. */
+   CIRCLIST_SCAN(li, pg->peer_list) {
+      struct peer *cand = peer_from_li(li);
+      if (cand != peer && peer_is_connected(li)) {
+         peergroup_cfcheckpt_maybe_complete(cand);
+         return;
+      }
+   }
+}
+
+
 int
 peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc)
 {
@@ -1058,19 +1263,7 @@ peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc)
       }
    }
 
-   /*
-    * Once at least one peer agrees (or all responses are in and agree),
-    * proceed to cfheader sync.
-    */
-   if (pg->cfcheckptAgreed >= 1 &&
-       pg->cfcheckptAgreed >= pg->cfcheckptPeers) {
-      pg->cfcheckptVerified = 1;
-      Log(LGPFX" BIP157: cfcheckpt verified by %d peer%s; starting cfheader sync.\n",
-          pg->cfcheckptAgreed, pg->cfcheckptAgreed > 1 ? "s" : "");
-      return peergroup_request_cfheaders(peer);
-   }
-
-   return 0;
+   return peergroup_cfcheckpt_maybe_complete(peer);
 }
 
 /*
@@ -1382,9 +1575,7 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
     * if --stop-after-height was requested and this was the last in-flight
     * block, stop now (the tx we were scanning for has been processed).
     */
-   if (pg->cfBlocksPending > 0) {
-      pg->cfBlocksPending--;
-   }
+   peergroup_remove_pending_block(&blockHash);
    if (pg->cfStopRequested && pg->cfBlocksPending == 0) {
       Warning(LGPFX" BIP157: matched blocks drained; stopping.\n");
       peergroup_download_complete();
@@ -1410,6 +1601,79 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
    }
 
    return 0;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_retry_block_fetch --
+ *
+ *      A peer replied 'notfound' for a getdata(MSG_BLOCK) we sent after a
+ *      cfilter match (typically a NODE_NETWORK_LIMITED peer that has pruned
+ *      the old block). Retry each hash against a different connected peer,
+ *      preferring one that is not NODE_NETWORK_LIMITED. If no other peer is
+ *      available, the fetch stays pending; a later refill/reconnect may
+ *      supply one.
+ *
+ *------------------------------------------------------------------------
+ */
+void
+peergroup_retry_block_fetch(struct peer *failedPeer,
+                           const uint256 *hashes,
+                           int numHashes)
+{
+   struct peergroup *pg = btc->peerGroup;
+   struct circlist_item *li;
+   struct peer *best = NULL;
+   bool bestIsLimited = 1;
+   int i;
+
+   CIRCLIST_SCAN(li, pg->peer_list) {
+      struct peer *cand = peer_from_li(li);
+      uint64 svc;
+
+      if (cand == failedPeer || !peer_is_connected(li)) {
+         continue;
+      }
+      svc = peer_get_services(li);
+      if ((svc & BTC_SERVICE_NODE_NETWORK) == 0) {
+         continue;
+      }
+
+      if (best == NULL) {
+         best = cand;
+         bestIsLimited = (svc & BTC_SERVICE_NODE_NETWORK_LIMITED) != 0;
+         continue;
+      }
+      if (bestIsLimited && (svc & BTC_SERVICE_NODE_NETWORK_LIMITED) == 0) {
+         best = cand;
+         bestIsLimited = 0;
+      }
+   }
+
+   if (best == NULL) {
+      Warning(LGPFX" BIP157: no alternate peer to retry %d block fetch(es); "
+              "will remain pending.\n", numHashes);
+      return;
+   }
+
+   for (i = 0; i < numHashes; i++) {
+      char hashStr[80];
+      int res;
+
+      uint256_snprintf_reverse(hashStr, sizeof hashStr, &hashes[i]);
+      Log(LGPFX" BIP157: retrying block %s via %s.\n",
+          hashStr, peer_name(best));
+
+      res = peer_send_getdata(best, INV_TYPE_MSG_BLOCK, &hashes[i], 1);
+      if (res == 0) {
+         peergroup_add_pending_block(&hashes[i], best);
+      } else {
+         Warning(LGPFX" BIP157: retry getdata failed for %s: %d.\n",
+                 hashStr, res);
+      }
+   }
 }
 
 
@@ -1635,14 +1899,6 @@ peergroup_check_liveness(void)
  *
  *-------------------------------------------------------------------------
  */
-/*
- * peergroup_periodic_cb (which calls this) runs every 15s (see
- * peergroup_init's periodUsec in main.c), so the detection latency is bounded
- * by that period, not by this threshold. Set below the tick period so a
- * genuine stall is always caught on the very next tick.
- */
-#define SYNC_STALL_USEC (10 * 1000 * 1000)  /* 10 seconds */
-
 static void
 peergroup_check_download_stall(void)
 {
@@ -1697,6 +1953,27 @@ peergroup_periodic_cb(void *clientData)
    peergroup_refill(FALSE);
    peergroup_check_liveness();
    peergroup_check_download_stall();
+}
+
+
+/*
+ *-------------------------------------------------------------------------
+ *
+ * peergroup_pending_blocks_cb --
+ *
+ *      Runs much more often than peergroup_periodic_cb so an unresponsive
+ *      peer for a matched-block fetch is retried within SYNC_STALL_USEC of
+ *      the request, not within the (much coarser) 15s general refill tick.
+ *
+ *-------------------------------------------------------------------------
+ */
+static void
+peergroup_pending_blocks_cb(void *clientData)
+{
+   if (bitc_exiting() || btc->peerGroup == NULL) {
+      return;
+   }
+   peergroup_check_pending_blocks();
 }
 
 
@@ -1774,6 +2051,14 @@ peergroup_init(struct config *config,
 
    poll_callback_time(btc->poll, periodUsec, 1 /* permanent */,
                       peergroup_periodic_cb, NULL);
+
+   /*
+    * Separate, more frequent timer for pending matched-block retries -- see
+    * peergroup_pending_blocks_cb. 2s gives a timely retry without spamming
+    * getdata on a merely-slow-but-still-responsive peer.
+    */
+   poll_callback_time(btc->poll, 2 * 1000 * 1000ULL, 1 /* permanent */,
+                      peergroup_pending_blocks_cb, NULL);
 }
 
 
@@ -1982,6 +2267,9 @@ peergroup_exit(struct peergroup *pg)
    s = poll_callback_time_remove(btc->poll, 1, peergroup_periodic_cb, NULL);
    ASSERT_NOT_TESTED(s);
 
+   s = poll_callback_time_remove(btc->poll, 1, peergroup_pending_blocks_cb, NULL);
+   ASSERT_NOT_TESTED(s);
+
    if (btc->updateAndExit && btc->stop == 1) {
       mtime_t delay = time_get() - pg->startTS;
       char *str = print_latency(delay);
@@ -1999,6 +2287,8 @@ peergroup_exit(struct peergroup *pg)
    pg->cfStore = NULL;
    free(pg->cfcheckptExpected);
    pg->cfcheckptExpected = NULL;
+   free(pg->cfPending);
+   pg->cfPending = NULL;
    peergroup_print_stats(pg);
    peergroup_destroy_peers();
    free(btc->peerGroup);

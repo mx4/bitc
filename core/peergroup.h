@@ -7,6 +7,17 @@ struct peer;
 struct config;
 struct buff;
 
+/*
+ * Tracks one outstanding getdata(MSG_BLOCK) sent after a cfilter match, so a
+ * silently unresponsive peer (no 'notfound', no data, ever) can be detected
+ * by elapsed time and retried against a different connected peer.
+ */
+struct cf_pending_block {
+   uint256   hash;
+   struct peer *requestedFrom;
+   mtime_t   requestTS;
+};
+
 struct peergroup {
    struct circlist_item *peer_list;
 
@@ -51,6 +62,16 @@ struct peergroup {
    int                   cfVerified;       /* number of cfilters verified so far */
    int                   cfBlocksPending;   /* matched full blocks awaited */
    bool                  cfStopRequested;   /* --stop-after-height reached */
+
+   /*
+    * Pending matched-block fetches (getdata(MSG_BLOCK) sent, response not
+    * yet received). Tracked with a timestamp so a silently unresponsive peer
+    * (common for NODE_NETWORK_LIMITED nodes asked for an old block, which
+    * often don't even bother sending 'notfound') can be retried against a
+    * different peer instead of hanging forever.
+    */
+   struct cf_pending_block *cfPending;      /* dynamic array, cfBlocksPending long */
+   int                      cfPendingCap;   /* allocated capacity of cfPending */
    int                   cfhdrStartHeight;  /* next height to request cfheaders for */
    int                   cfhdrTipHeight;    /* target height for cfheader sync */
    uint256               cfhdrPrevHeader;   /* prevFilterHeader for the next batch */
@@ -83,6 +104,7 @@ void peergroup_refill(bool init);
 void peergroup_notify_destroy(void);
 void peergroup_dequeue_peerlist(const struct circlist_item *li);
 void peergroup_queue_peerlist(struct circlist_item *li);
+void peergroup_notify_peer_gone(struct peer *peer);
 
 int peergroup_handle_handshake_ok(struct peer *peer, int peerStartingHeight);
 int peergroup_handle_merkleblock(struct peer *peer, const btc_msg_merkleblock *blk);
@@ -90,6 +112,8 @@ int peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf);
 int peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh);
 int peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc);
 int peergroup_handle_block(struct peer *peer, const btc_msg_block *blk);
+void peergroup_retry_block_fetch(struct peer *failedPeer,
+                                 const uint256 *hashes, int numHashes);
 void peergroup_handle_addr(struct peer *peer, btc_msg_address **addrs,
                           size_t numAddrs);
 int peergroup_lookup_broadcast_tx(struct peergroup *pg, const uint256 *hash,

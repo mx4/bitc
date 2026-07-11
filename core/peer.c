@@ -543,6 +543,13 @@ peer_destroy(struct circlist_item *li,
       btc->peerGroup->downloadPeer = NULL;
    }
 
+   /*
+    * If we're mid cfcheckpt verification and were waiting on a response from
+    * this peer, it can no longer answer -- revise the target down instead of
+    * hanging forever (see peergroup_notify_peer_gone).
+    */
+   peergroup_notify_peer_gone(peer);
+
    if (peer_remove_addr(err)) {
       addrbook_remove_entry(btc->book, peer->paddr);
       free(peer->paddr);
@@ -683,7 +690,27 @@ peer_send_ping(struct peer *peer)
 static int
 peer_handle_notfound(struct peer *peer)
 {
-   return btcmsg_parse_notfound(&peer->recvBuf);
+   uint256 *blockHashes;
+   int numBlockHashes;
+   int res;
+
+   res = btcmsg_parse_notfound(&peer->recvBuf, &blockHashes, &numBlockHashes);
+   if (res) {
+      return res;
+   }
+
+   /*
+    * A peer (often NODE_NETWORK_LIMITED) told us it doesn't have a block we
+    * requested because its cfilter matched our wallet. Ask the peergroup to
+    * retry each one against a different connected peer, instead of leaving
+    * the match permanently un-fetched.
+    */
+   if (numBlockHashes > 0) {
+      peergroup_retry_block_fetch(peer, blockHashes, numBlockHashes);
+   }
+   free(blockHashes);
+
+   return 0;
 }
 
 
@@ -1072,19 +1099,19 @@ peer_handle_version(struct peer *peer)
    }
 
    /*
-    * We need peers that serve historical blocks so we can fetch the ones our
-    * filters match. NODE_NETWORK_LIMITED (BIP159) peers only keep the last
-    * ~288 blocks (~2 days), which is nowhere near enough for an initial scan
-    * from the wallet's birth height -- and such peers commonly still set
-    * NODE_NETWORK alongside NODE_NETWORK_LIMITED, so checking for the
-    * absence of NODE_NETWORK alone is not sufficient: we must also reject
-    * peers that advertise NODE_NETWORK_LIMITED, since a getdata(MSG_BLOCK)
-    * for an old block will otherwise silently go unanswered forever.
+    * We need peers that serve at least headers/cfilters. NODE_NETWORK_LIMITED
+    * (BIP159) peers only keep the last ~288 blocks (~2 days) of *full* block
+    * data, but in practice nearly every reachable node today advertises this
+    * bit -- rejecting them outright leaves no usable peers at all. They still
+    * serve headers and (per BIP157/158) typically serve cfilters/cfheaders
+    * for the whole chain, so keep them; only the final getdata(MSG_BLOCK) for
+    * an old matched block can fail against such a peer. That is handled by
+    * retrying the block fetch against another connected peer (see
+    * peergroup_handle_block's notfound/timeout handling) rather than by
+    * refusing the connection here.
     */
-   if ((version.services & BTC_SERVICE_NODE_NETWORK) == 0 ||
-       (version.services & BTC_SERVICE_NODE_NETWORK_LIMITED)) {
-      Warning(LGPFX" %s: node does not serve full historical blocks "
-              "(services=%#llx, %s).\n",
+   if ((version.services & BTC_SERVICE_NODE_NETWORK) == 0) {
+      Warning(LGPFX" %s: node does not serve full blocks (services=%#llx, %s).\n",
               peer->name, (unsigned long long)version.services, peer->clientStr);
       return 1;
    }
