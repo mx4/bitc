@@ -450,7 +450,7 @@ peergroup_process_filtered_block(struct peer *peer,
  *------------------------------------------------------------------------
  */
 
-int
+static int
 peergroup_download_headers(struct peer *peer,
                            int peerStartingHeight)
 {
@@ -512,7 +512,7 @@ peergroup_download_headers(struct peer *peer,
  *------------------------------------------------------------------------
  */
 
-int
+static int
 peergroup_download_filtered_blocks(struct peer *peer)
 {
    struct blockstore *bs = btc->blockStore;
@@ -609,7 +609,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
  *------------------------------------------------------------------------
  */
 
-int
+static int
 peergroup_download_filtered_blocks_continue(struct peer *peer)
 {
    uint256 best_hash;

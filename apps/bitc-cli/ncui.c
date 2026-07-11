@@ -483,7 +483,7 @@ ncui_status_update(bool update)
 {
    struct ncui *ncui = btc->ui;
    WINDOW *win = stdscr;
-   char *type;
+   const char *type;
 
    ASSERT(mutex_islocked(btcui->lock));
 
@@ -506,12 +506,12 @@ ncui_status_update(bool update)
 
    type = btc->testnet ? "[TESTNET]" : NULL;
 
-   char *proxyStr = NULL;
+   const char *proxyStr = NULL;
    if (btc->socks5_proxy) {
       proxyStr = "[SOCKS5]";
    }
 
-   char *wltStr = NULL;
+   const char *wltStr = NULL;
    int attr;
    switch (btc->wallet_state) {
    case WALLET_PLAIN:

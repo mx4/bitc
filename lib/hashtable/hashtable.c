@@ -555,7 +555,6 @@ hashtable_insert_test(uint32 n,
                       volatile int *stop)
 {
    struct hashtable *ht = hashtable_create();
-   int32 added = 0;
    uint32 i;
    bool s;
 
@@ -565,9 +564,6 @@ hashtable_insert_test(uint32 n,
       uint32 r = i;
       s = hashtable_insert(ht, &r, sizeof r, NULL);
       ASSERT(s);
-      if (s) {
-         added++;
-      }
    }
    Warning(LGPFX" stats: numEntries=%u maxDepth=%u emptyBuckets=%u\n",
            hashtable_getnumentries(ht),
@@ -580,9 +576,6 @@ hashtable_insert_test(uint32 n,
    for (i = 0; *stop == 0 && i < n; i++) {
       s = hashtable_remove(ht, (uint8 *)&i, sizeof i);
       ASSERT(s);
-      if (s) {
-         added--;
-      }
    }
    hashtable_clear(ht);
    hashtable_destroy(ht);

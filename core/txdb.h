@@ -9,7 +9,7 @@ struct config;
 struct btc_tx_desc;
 
 int  txdb_zap(struct config *config);
-int  txdb_open(struct config *c, char **errStr, struct txdb **db);
+int  txdb_open(struct config *c, const char **errStr, struct txdb **db);
 void txdb_close(struct txdb *db);
 bool txdb_has_tx(const struct txdb *txdb, const uint256 *hash);
 int  txdb_handle_tx(struct txdb *db, const uint256 *blkHash,

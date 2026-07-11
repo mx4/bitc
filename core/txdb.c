@@ -878,7 +878,7 @@ txdb_load_tx(struct txdb *txdb,
 
 int
 txdb_open(struct config *config,
-          char         **errStr,
+          const char   **errStr,
           struct txdb  **out)
 {
    leveldb_iterator_t* iter;

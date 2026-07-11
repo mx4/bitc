@@ -81,7 +81,7 @@ static void
 bitc_test_tx(void)
 {
    struct btc_tx_desc desc;
-   char *errStr = NULL;
+   const char *errStr = NULL;
    int res;
    int i;
 

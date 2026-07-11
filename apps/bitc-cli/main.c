@@ -182,7 +182,7 @@ static int
 bitc_encrypt_wallet(struct secure_area *pass_old,
                     struct secure_area *pass_new)
 {
-   char *errStr = NULL;
+   const char *errStr = NULL;
    int res;
 
    if (pass_new == NULL) {
@@ -223,7 +223,7 @@ bitc_add_address(const char         *desc,
                  struct secure_area *pass,
                  char              **btc_addr)
 {
-   char *errStr = NULL;
+   const char *errStr = NULL;
    int res;
 
    res = blockstore_init(btc->config, &btc->blockStore);
@@ -981,7 +981,7 @@ bitc_init(struct secure_area *passphrase,
           bool                updateAndExit,
           int                 maxPeers,
           int                 minPeersInit,
-          char              **errStr)
+          const char        **errStr)
 {
    int res;
 
@@ -1102,7 +1102,7 @@ int main(int argc, char *argv[])
    struct secure_area *passphrase = NULL;
    const int minPeersInit = 50;
    char *addr_label = NULL;
-   char *errStr = NULL;
+   const char *errStr = NULL;
    char *configPath = NULL;
    char *testStr = NULL;
    int maxPeers = 5;

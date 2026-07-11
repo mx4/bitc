@@ -21,7 +21,7 @@ struct wallet_pubkey {
 
 void wallet_close(struct wallet *wallet);
 int  wallet_open(struct config *cfg, struct secure_area *pass,
-                 char **errStr, struct wallet **wallet);
+                 const char **errStr, struct wallet **wallet);
 int  wallet_zap_txdb(struct config *config);
 int  wallet_add_key(struct wallet *wallet, const char *desc, char **btc_addr);
 bool wallet_has_tx(struct wallet *wlt, const uint256 *txHash);

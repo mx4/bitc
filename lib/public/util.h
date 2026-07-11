@@ -54,6 +54,7 @@ struct mutex;
 
 struct mutex *mutex_alloc(void);
 void mutex_free(struct mutex *lock);
+void mutex_destroy(struct mutex *lock);
 void mutex_lock(struct mutex *lock);
 void mutex_unlock(struct mutex *lock);
 bool mutex_islocked(struct mutex *lock);

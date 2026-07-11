@@ -578,7 +578,7 @@ wallet_crypt_init(struct wallet *wallet,
 
 static int
 wallet_load_keys(struct wallet     *wallet,
-                 char             **errStr,
+                 const char       **errStr,
                  struct config     *cfg,
                  enum wallet_state *wallet_state)
 {
@@ -837,7 +837,7 @@ wallet_export_bitcoin_addrs(const struct wallet *wallet,
 static struct wallet *
 wallet_open_file(struct config      *config,
                  struct secure_area *pass,
-                 char              **errStr,
+                 const char        **errStr,
                  enum wallet_state  *wallet_state)
 {
    struct wallet *wallet;
@@ -892,7 +892,7 @@ exit:
 int
 wallet_open(struct config      *config,
             struct secure_area *pass,
-            char              **errStr,
+            const char        **errStr,
             struct wallet     **walletOut)
 {
    struct wallet *wallet;
@@ -1245,7 +1245,7 @@ wallet_verify(struct secure_area *passphrase,
               enum wallet_state  *wlt_state)
 {
    struct wallet *wallet;
-   char *errStr;
+   const char *errStr;
    bool res;
 
    *wlt_state = WALLET_UNKNOWN;

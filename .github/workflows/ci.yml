@@ -20,6 +20,8 @@ jobs:
         libssl-dev libncurses-dev
     - name: build (debug)
       run: make
+    - name: build (strict warnings)
+      run: make clean && make STRICT=1
     - name: build (release)
       run: make clean && make BUILD=release
     - name: fuzz parsers
