@@ -350,13 +350,17 @@ btcmsg_parse_notfound(struct buff *buf)
       btc_msg_inv inv;
 
       res = deserialize_inv(buf, &inv);
-      ASSERT(res == 0);
+      if (res) {
+         return res;
+      }
 
       uint256_snprintf_reverse(str, sizeof str, &inv.hash);
       Warning(LGPFX" NOTFOUND: inv: %s %s\n", str, btc_inv_type2str(inv.type));
    }
 
-   ASSERT(buff_space_left(buf) == 0);
+   if (buff_space_left(buf) != 0) {
+      return 1;
+   }
 
    return res;
 }
@@ -447,21 +451,38 @@ btcmsg_walk_tree(btc_msg_merkleblock *blk,
                  uint32               height,
                  uint32               pos,
                  uint32              *bitIdx,
-                 uint32              *hashIdx)
+                 uint32              *hashIdx,
+                 bool                *ok)
 {
    uint256 hash;
    bool parent;
 
-   ASSERT(*bitIdx < blk->bitArraySize * 8);
+   memset(&hash, 0, sizeof hash);
+
+   /*
+    * Every index below is derived from peer-supplied counts. Bail gracefully
+    * (set *ok = 0) instead of asserting so a malformed merkleblock cannot walk
+    * out of bounds or crash the process.
+    */
+   if (!*ok || *bitIdx >= blk->bitArraySize * 8) {
+      *ok = 0;
+      return hash;
+   }
    parent = bit_isset(blk->bit, *bitIdx);
    (*bitIdx)++;
 
    if (!parent || height == 0) {
-      ASSERT(*hashIdx < blk->hashCount);
+      if (*hashIdx >= blk->hashCount) {
+         *ok = 0;
+         return hash;
+      }
       hash = blk->hash[*hashIdx];
 
       if (height == 0 && parent) {
-         ASSERT(blk->matchedTxCount < blk->txCount);
+         if (blk->matchedTxCount >= blk->hashCount) {
+            *ok = 0;
+            return hash;
+         }
          blk->matchedTxHash[blk->matchedTxCount] = hash;
          blk->matchedTxCount++;
       }
@@ -473,9 +494,9 @@ btcmsg_walk_tree(btc_msg_merkleblock *blk,
       uint256 l;
       uint256 r;
 
-      l = btcmsg_walk_tree(blk, height - 1, pos * 2, bitIdx, hashIdx);
+      l = btcmsg_walk_tree(blk, height - 1, pos * 2, bitIdx, hashIdx, ok);
       if (pos * 2 + 1 < btcmsg_get_width(blk, height - 1)) {
-         r = btcmsg_walk_tree(blk, height - 1, pos * 2 + 1, bitIdx, hashIdx);
+         r = btcmsg_walk_tree(blk, height - 1, pos * 2 + 1, bitIdx, hashIdx, ok);
       } else {
          r = l;
       }
@@ -504,6 +525,7 @@ btcmsg_verify_merkle_tree(btc_msg_merkleblock *blk)
    uint32 bitIdx = 0;
    uint32 hashIdx = 0;
    int height = 0;
+   bool ok = 1;
 
    while (btcmsg_get_width(blk, height) > 1) {
       height++;
@@ -512,10 +534,18 @@ btcmsg_verify_merkle_tree(btc_msg_merkleblock *blk)
    ASSERT(blk->matchedTxHash == NULL);
    ASSERT(blk->matchedTxCount == 0);
    /*
-    * We allocate enough room so all the tx can match.
+    * There can be at most hashCount matched leaves (each match consumes one of
+    * the supplied hashes), so size by hashCount -- txCount is peer-controlled
+    * and unbounded, which would allow a huge allocation.
     */
-   blk->matchedTxHash = safe_malloc(blk->txCount * sizeof(uint256));
-   root = btcmsg_walk_tree(blk, height, 0, &bitIdx, &hashIdx);
+   blk->matchedTxHash = safe_malloc(MAX(blk->hashCount, 1) * sizeof(uint256));
+   root = btcmsg_walk_tree(blk, height, 0, &bitIdx, &hashIdx, &ok);
+   if (!ok) {
+      free(blk->matchedTxHash);
+      blk->matchedTxHash = NULL;
+      blk->matchedTxCount = 0;
+      return 0;
+   }
 
    if (blk->matchedTxCount == 0) {
       free(blk->matchedTxHash);
@@ -554,9 +584,13 @@ btcmsg_parse_merkleblock(struct buff          *buf,
    uint64 i;
    int res;
 
-   ASSERT(buff_maxlen(buf) > sizeof(btc_block_header));
-
    *blkOut = NULL;
+
+   /* The header hash below reads the first 80 bytes raw; require them. */
+   if (buff_maxlen(buf) <= sizeof(btc_block_header)) {
+      return 1;
+   }
+
    blk = safe_calloc(1, sizeof *blk);
    hash256_calc(buff_base(buf), sizeof(btc_block_header), &blk->blkHash);
 
@@ -573,7 +607,8 @@ btcmsg_parse_merkleblock(struct buff          *buf,
    res |= deserialize_varint(buf, &blk->hashCount);
 
    if (res != 0 || blk->hashCount > BTC_MSG_MERKLE_BLOCK_MAX_TX
-       || blk->hashCount > blk->txCount) {
+       || blk->hashCount > blk->txCount
+       || blk->txCount == 0 || blk->txCount > (1u << 22)) {
       Log(LGPFX" too many hashes: %llu vs %u (re=%d)\n",
           blk->hashCount, blk->txCount, res);
       goto error;
@@ -603,11 +638,15 @@ btcmsg_parse_merkleblock(struct buff          *buf,
    }
 
    if (!btcmsg_verify_merkle_tree(blk)) {
-      Panic("Failed to verify merkle branch!\n");
+      Log(LGPFX" failed to verify merkle branch.\n");
+      res = 1;
+      goto error;
    }
 
-   ASSERT(res == 0);
-   ASSERT(buff_space_left(buf) == 0);
+   if (buff_space_left(buf) != 0) {
+      res = 1;
+      goto error;
+   }
 
    *blkOut = blk;
 
@@ -617,7 +656,8 @@ error:
    NOT_TESTED();
    btc_msg_merkleblock_free(blk);
 
-   return res;
+   /* Reached only on failure; never report success with a NULL *blkOut. */
+   return 1;
 }
 
 
@@ -636,8 +676,13 @@ btcmsg_parse_block(struct buff   *buf,
    int res;
 
    res = deserialize_block(buf, blk);
+   if (res) {
+      return res;
+   }
 
-   ASSERT(buff_space_left(buf) == 0);
+   if (buff_space_left(buf) != 0) {
+      return 1;
+   }
 
    return res;
 }
@@ -682,14 +727,16 @@ btcmsg_parse_headers(struct buff       *buf,
       res |= deserialize_blockheader(buf, headers + i);
       res |= deserialize_varint(buf, &numTx);
 
-      if (res) {
+      if (res || numTx != 0) {
          free(headers);
-         return res;
+         return 1;
       }
-      ASSERT(numTx == 0);
    }
 
-   ASSERT(buff_space_left(buf) == 0);
+   if (buff_space_left(buf) != 0) {
+      free(headers);
+      return 1;
+   }
 
    *headersOut = headers;
    *num = n;
@@ -1268,7 +1315,10 @@ btcmsg_parse_addr(uint32                    protversion,
       memcpy(addrs[numAddrs], &addr, sizeof addr);
       numAddrs++;
    }
-   ASSERT(buff_space_left(buf) == 0);
+   if (buff_space_left(buf) != 0) {
+      res = 1;
+      goto exit;
+   }
 
    *addrsOut = addrs;
    *numAddrsOut = numAddrs;
@@ -1276,9 +1326,14 @@ btcmsg_parse_addr(uint32                    protversion,
    return 0;
 
 exit:
-   while (j >= 0) {
-      free(addrs[j]);
-      j--;
+   /*
+    * Only addrs[0..numAddrs-1] were allocated -- the array is compacted as
+    * non-IPv4/too-old entries are skipped -- so free by numAddrs, not the
+    * message-index j (which would free uninitialized slots).
+    */
+   while (numAddrs > 0) {
+      numAddrs--;
+      free(addrs[numAddrs]);
    }
    free(addrs);
    return res;
@@ -1495,6 +1550,9 @@ btc_msg_block_free(btc_msg_block *blk)
 void
 btc_msg_merkleblock_free(btc_msg_merkleblock *blk)
 {
+   if (blk == NULL) {
+      return;
+   }
    free(blk->matchedTxHash);
    free(blk->hash);
    free(blk->bit);

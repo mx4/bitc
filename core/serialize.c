@@ -120,34 +120,57 @@ deserialize_tx(struct buff *buf,
    uint64 i;
    int res;
 
+   /* Zero-init so a partial parse is safe to hand to btc_msg_tx_free(). */
+   memset(tx, 0, sizeof *tx);
+
    res  = deserialize_uint32(buf, &tx->version);
    res |= deserialize_varint(buf, &tx->in_count);
 
-   tx->tx_in = safe_malloc(tx->in_count * sizeof *tx->tx_in);
+   /* Each input is >= 41 bytes on the wire (32 + 4 + 1 + 4). */
+   if (res || tx->in_count > buff_space_left(buf) / 41) {
+      tx->in_count = 0;
+      return 1;
+   }
+   tx->tx_in = safe_calloc(tx->in_count, sizeof *tx->tx_in);
 
    for (i = 0; i < tx->in_count; i++) {
       res |= deserialize_uint256(buf, &tx->tx_in[i].prevTxHash);
       res |= deserialize_uint32(buf,  &tx->tx_in[i].prevTxOutIdx);
       res |= deserialize_varint(buf,  &tx->tx_in[i].scriptLength);
+      if (res || tx->tx_in[i].scriptLength > buff_space_left(buf)) {
+         return 1;
+      }
       tx->tx_in[i].scriptSig = safe_malloc(tx->tx_in[i].scriptLength);
       res |= deserialize_bytes(buf,   tx->tx_in[i].scriptSig, tx->tx_in[i].scriptLength);
       res |= deserialize_uint32(buf, &tx->tx_in[i].sequence);
+      if (res) {
+         return 1;
+      }
    }
 
    res |= deserialize_varint(buf, &tx->out_count);
 
-   tx->tx_out = safe_malloc(tx->out_count * sizeof *tx->tx_out);
+   /* Each output is >= 9 bytes on the wire (8 + 1). */
+   if (res || tx->out_count > buff_space_left(buf) / 9) {
+      tx->out_count = 0;
+      return 1;
+   }
+   tx->tx_out = safe_calloc(tx->out_count, sizeof *tx->tx_out);
 
    for (i = 0; i < tx->out_count; i++) {
       res |= deserialize_uint64(buf, &tx->tx_out[i].value);
       res |= deserialize_varint(buf, &tx->tx_out[i].scriptLength);
+      if (res || tx->tx_out[i].scriptLength > buff_space_left(buf)) {
+         return 1;
+      }
       tx->tx_out[i].scriptPubKey = safe_malloc(tx->tx_out[i].scriptLength);
       res |= deserialize_bytes(buf, tx->tx_out[i].scriptPubKey, tx->tx_out[i].scriptLength);
+      if (res) {
+         return 1;
+      }
    }
 
    res |= deserialize_uint32(buf, &tx->lock_time);
-
-   ASSERT_NOT_TESTED(buff_space_left(buf) == 0);
 
    return res;
 }
@@ -208,19 +231,34 @@ deserialize_block(struct buff *buf,
    uint64 i;
    int res;
 
+   blk->tx = NULL;
+   blk->txCount = 0;
+
    res  = deserialize_blockheader(buf, &blk->header);
-   btcmsg_print_header(&blk->header);
    res |= deserialize_varint(buf, &blk->txCount);
-   Warning("numTx=%llu\n", blk->txCount);
 
-   blk->tx = safe_malloc(blk->txCount * sizeof *blk->tx);
-
-   for (i = 0; i < blk->txCount; i++) {
-      res |= deserialize_tx(buf, blk->tx + i);
+   /*
+    * txCount is a peer-controlled varint. A transaction is at least 10 bytes on
+    * the wire, so reject any count that cannot fit in what remains -- otherwise
+    * the allocation below could be enormous or integer-overflow.
+    */
+   if (res || blk->txCount > buff_space_left(buf) / 10) {
+      blk->txCount = 0;
+      return 1;
    }
 
-   Warning("sz: %zu vs %zu\n", buff_curlen(buf) ,buff_maxlen(buf));
-   ASSERT(buff_space_left(buf) == 0);
+   blk->tx = safe_calloc(blk->txCount, sizeof *blk->tx);
+
+   for (i = 0; i < blk->txCount; i++) {
+      res = deserialize_tx(buf, blk->tx + i);
+      if (res) {
+         return 1;
+      }
+   }
+
+   if (buff_space_left(buf) != 0) {
+      return 1;
+   }
 
    return res;
 }
@@ -330,6 +368,10 @@ deserialize_str_alloc(struct buff *buf,
    }
    if (length == 0) {
       return 0;
+   }
+   /* The string bytes must be present; reject a length that overruns. */
+   if (length > buff_space_left(buf)) {
+      return 1;
    }
 
    *str = safe_calloc(1, length + 1);
@@ -745,7 +787,10 @@ deserialize_version(struct buff *buf,
    } else {
       v->relayTx = 1;
    }
-   ASSERT(buff_space_left(buf) == 0);
+   /* A well-formed version is fully consumed; trailing bytes => reject. */
+   if (buff_space_left(buf) != 0) {
+      return 1;
+   }
 
    return res;
 }
