@@ -61,15 +61,11 @@ typedef uint32 uintptr_t;
 #define PRINTF_GCC_DECL(_f, _v) __attribute__((__format__(__printf__, _f, _v)))
 #define NORETURN                __attribute__((noreturn))
 
-#ifdef __GNUC__
-#define ASSERT_ON_COMPILE(_x)     do { } while (0)
-#else
-#define ASSERT_ON_COMPILE(_x)         \
-   do {                               \
-      enum { _v = (_x) ? 1 : -1 };    \
-      typedef char _bogusArray[_v];   \
-   } while (0)
-#endif
+/*
+ * Compile-time assertion. Previously a no-op on GCC/clang; use C11's
+ * _Static_assert so the checks are actually enforced by the build.
+ */
+#define ASSERT_ON_COMPILE(_x)     _Static_assert((_x), #_x)
 
 /*
  *---------------------------------------------------------------------------
