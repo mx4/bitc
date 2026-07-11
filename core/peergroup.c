@@ -1231,8 +1231,18 @@ peergroup_handle_headers(struct peer            *peer,
             Warning(LGPFX" fetched %6d headers out of %d\n",
                     btc->peerGroup->numHdrFetched, btc->peerGroup->numHdrToFetch);
          }
-         peergroup_add_block_finalize(bs, TRUE /* header ony */);
       }
+   }
+
+   /*
+    * Persist the whole batch with a single write instead of one 80-byte pwrite
+    * per header. blockstore_write_headers() already coalesces all not-yet-
+    * written entries (a 'headers' message carries at most 2000, well under its
+    * internal 2048 cap), so calling it once per batch is both correct and far
+    * fewer syscalls.
+    */
+   if (numAdded > 0) {
+      peergroup_add_block_finalize(bs, TRUE /* header only */);
    }
 
    peergroup_download_progress();
