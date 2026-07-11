@@ -24,6 +24,15 @@
 #define BTC_MSG_ADDR_MAX_ENTRIES        1000
 #define BTC_MSG_NOTFOUND_MAX_ENTRIES    50000
 
+/*
+ * Bitcoin Core's wire-protocol message size limit (see net.h's
+ * MAX_PROTOCOL_MESSAGE_LENGTH). A full block with witness data can
+ * approach several MB, well past the historical 256KB cap this client
+ * previously (incorrectly) enforced for every message type -- which
+ * silently broke every getdata(MSG_BLOCK) response over that size.
+ */
+#define BTC_MSG_MAX_PAYLOAD_LENGTH      (32 * 1024 * 1024)
+
 enum btc_msg_type {
    BTC_MSG_UNKNOWN = 0,
    BTC_MSG_VERSION,

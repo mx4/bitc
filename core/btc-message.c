@@ -296,8 +296,9 @@ btcmsg_header_valid(const btc_msg_header *hdr)
       log_info(LGPFX" invalid magic: %#x vs %#x\n", hdr->magic, magic);
       return 0;
    }
-   if (hdr->payloadLength > 256 * 1024) {
-      log_info(LGPFX" payloadLength = %u\n", hdr->payloadLength);
+   if (hdr->payloadLength > BTC_MSG_MAX_PAYLOAD_LENGTH) {
+      log_warn(LGPFX" payloadLength = %u exceeds max %u\n",
+              hdr->payloadLength, BTC_MSG_MAX_PAYLOAD_LENGTH);
       return 0;
    }
    return 1;

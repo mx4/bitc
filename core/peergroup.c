@@ -42,6 +42,7 @@ static int peergroup_request_cfheaders(struct peer *peer);
 static int peergroup_verify_cfcheckpts(struct peer *peer);
 static void peergroup_add_pending_block(const uint256 *hash, struct peer *from);
 static void peergroup_remove_pending_block(const uint256 *hash);
+static void peergroup_save_lastblk(struct config *config, const uint256 *hash);
 
 
 struct tx_broadcast {
@@ -1947,12 +1948,26 @@ peergroup_check_download_stall(void)
 static void
 peergroup_periodic_cb(void *clientData)
 {
+   struct peergroup *pg = btc->peerGroup;
+
    if (bitc_exiting()) {
       return;
    }
    peergroup_refill(FALSE);
    peergroup_check_liveness();
    peergroup_check_download_stall();
+
+   /*
+    * Persist the sync checkpoint periodically, not only on a clean exit.
+    * peergroup_exit() (which also calls this) may never run on a hard kill
+    * or crash mid-sync, in which case any progress made since the last save
+    * would otherwise be silently lost and re-scanned from scratch on the
+    * next run.
+    */
+   if (pg->configNeedWrite) {
+      peergroup_save_lastblk(btc->config, &pg->lastBlk);
+      pg->configNeedWrite = 0;
+   }
 }
 
 
