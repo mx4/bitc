@@ -18,6 +18,7 @@
 #include "bitc.h"
 #include "hashtable.h"
 #include "buff.h"
+#include "serialize.h"
 #include "gcs.h"
 #include "cfheader-store.h"
 
@@ -1249,6 +1250,7 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
    uint256 blockHash;
    uint256 lastTxdb;
    int blockHeight;
+   int res = 0;
    uint64 i;
 
    ASSERT(btc->state == BITC_STATE_UPDATE_TXDB ||
@@ -1272,11 +1274,30 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
 
    /*
     * Feed each transaction to the wallet for credit/debit detection.
-    * wallet_handle_tx expects raw tx bytes, but we have parsed txs.
-    * For now, log the count; full tx scanning will be wired in a follow-up.
+    * We serialize each parsed tx back to raw bytes (the format
+    * wallet_handle_tx / txdb_handle_tx expects), then hand it off.
     */
    for (i = 0; i < blk->txCount; i++) {
-      /* TODO: feed each tx to wallet_handle_tx once we have a serializer. */
+      struct buff *txBuf;
+      const uint8 *raw;
+      size_t rawLen;
+
+      txBuf = buff_alloc();
+      res = serialize_tx(txBuf, &blk->tx[i]);
+      if (res) {
+         Warning(LGPFX" BIP157: failed to serialize tx %llu in block %d.\n",
+                (unsigned long long)i, blockHeight);
+         buff_free(txBuf);
+         continue;
+      }
+      raw = buff_base(txBuf);
+      rawLen = buff_curlen(txBuf);
+      res = wallet_handle_tx(btc->wallet, &blockHash, raw, rawLen);
+      if (res) {
+         Warning(LGPFX" BIP157: wallet_handle_tx failed for tx %llu in block %d.\n",
+                (unsigned long long)i, blockHeight);
+      }
+      buff_free(txBuf);
    }
 
    /*
