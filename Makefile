@@ -206,7 +206,7 @@ lldb: apps/test/lldb.c
 ###   ./fuzz-parse --hex <bytes-from-the-crash-line>
 ###
 FUZZ_OBJ  = $(BLDDIR)/core/btc-message.o $(BLDDIR)/core/serialize.o
-FUZZ_OBJ += $(BLDDIR)/core/hash.o $(BLDDIR)/core/base58.o
+FUZZ_OBJ += $(BLDDIR)/core/hash.o $(BLDDIR)/core/ripemd160.o $(BLDDIR)/core/base58.o
 FUZZ_OBJ += $(BLDDIR)/lib/util/util.o $(BLDDIR)/lib/file/file.o
 
 fuzz-parse: apps/test/fuzz-parse.c $(FUZZ_OBJ)
