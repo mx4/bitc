@@ -26,3 +26,5 @@ jobs:
       run: make clean && make BUILD=release
     - name: fuzz parsers
       run: make check
+    - name: fuzz parsers (asan+ubsan)
+      run: make clean && make BUILD=asan+ubsan check FUZZ_ITERS=20000

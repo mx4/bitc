@@ -75,6 +75,12 @@ CFLAGS += -O2 -DNDEBUG
 else ifeq ($(BUILD), asan)
 CFLAGS += -O1 -g -fsanitize=address
 LDOPTS += -fsanitize=address
+else ifeq ($(BUILD), ubsan)
+CFLAGS += -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined
+LDOPTS += -fsanitize=undefined
+else ifeq ($(BUILD), asan+ubsan)
+CFLAGS += -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined
+LDOPTS += -fsanitize=address,undefined
 else
 CFLAGS += -O1 -g
 endif
