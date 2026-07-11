@@ -23,4 +23,6 @@ int peer_send_getblocks(struct peer *peer);
 int peer_send_mempool(struct peer *peer);
 int peer_send_getdata(struct peer *peer, enum btc_inv_type type,
                       const uint256 *hash, int numHash);
+int peer_send_getcfilters(struct peer *peer, uint8 filterType,
+                          uint32 startHeight, const uint256 *stopHash);
 

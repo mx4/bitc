@@ -329,6 +329,34 @@ peer_send_getdata(struct peer *peer,
 /*
  *------------------------------------------------------------------------
  *
+ * peer_send_getcfilters --
+ *
+ *------------------------------------------------------------------------
+ */
+int
+peer_send_getcfilters(struct peer *peer,
+                      uint8 filterType,
+                      uint32 startHeight,
+                      const uint256 *stopHash)
+{
+   btc_msg_getcfilters g;
+   int res;
+
+   g.filterType  = filterType;
+   g.startHeight = startHeight;
+   g.stopHash    = *stopHash;
+
+   res = btcmsg_craft_getcfilters(&g, &peer->sendBuf);
+   if (res == 0) {
+      res = peer_send_msg(peer, BTC_MSG_GETCFILTERS);
+   }
+   return res;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
  * peer_send_mempool --
  *
  *------------------------------------------------------------------------
@@ -387,11 +415,12 @@ peer_handshake_ok(struct peer *peer)
    /*
     * BIP37 bloom filtering is disabled by default on modern nodes
     * (peerbloomfilters=0 since Bitcoin Core 0.19), and such nodes drop peers
-    * that send 'filterload'. Only send it to peers advertising NODE_BLOOM;
-    * everything else is served via headers sync and, going forward, BIP157
+    * that send 'filterload'. Only send it to peers advertising NODE_BLOOM when
+    * the legacy BIP37 path is explicitly enabled; the default path is BIP157
     * compact block filters.
     */
-   if (peer->services & BTC_SERVICE_NODE_BLOOM) {
+   if (btc->peerGroup->useBip37 &&
+       (peer->services & BTC_SERVICE_NODE_BLOOM)) {
       res = peer_send_filterload(peer);
       if (res) {
          return res;
@@ -775,12 +804,14 @@ peer_handle_block(struct peer *peer)
    btc_msg_block blk;
    int res;
 
-   NOT_TESTED();
-
    res = btcmsg_parse_block(&peer->recvBuf, &blk);
 
    if (res == 0) {
-      //btcmsg_print_block(blk);
+      /*
+       * BIP157: we received a full block because its cfilter matched our
+       * wallet. Hand it to the peergroup for txdb processing.
+       */
+      peergroup_handle_block(peer, &blk);
       btc_msg_block_free(&blk);
    }
 
@@ -1070,8 +1101,11 @@ peer_handle_cfilter(struct peer *peer)
    }
    Log(LGPFX" %s: cfilter type=%u numBytes=%llu\n",
        peer->name, cf.filterType, (unsigned long long)cf.numBytes);
+
+   res = peergroup_handle_cfilter(peer, &cf);
+
    btc_msg_cfilter_free(&cf);
-   return 0;
+   return res;
 }
 
 

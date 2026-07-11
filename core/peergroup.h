@@ -36,6 +36,18 @@ struct peergroup {
 
    mtime_t               startTS;
    mtime_t               firstConnectTS;
+
+   /*
+    * BIP157 compact-filter sync state. When useBip37 is false (the default),
+    * the client syncs cfheaders then cfilters instead of sending filterload +
+    * merkleblock. The cfilter scan walks from cfScanHeight upward; each
+    * cfilter is GCS-matched against the wallet's scriptPubKeys, and matching
+    * blocks are fetched via getdata(MSG_BLOCK).
+    */
+   struct cfheaderstore *cfStore;
+   int                   cfScanHeight;     /* next height to request cfilters for */
+   int                   cfTipHeight;      /* height of the last cfilter we requested */
+   bool                  useBip37;          /* legacy BIP37 fallback (default false) */
 };
 
 
@@ -54,6 +66,8 @@ void peergroup_queue_peerlist(struct circlist_item *li);
 
 int peergroup_handle_handshake_ok(struct peer *peer, int peerStartingHeight);
 int peergroup_handle_merkleblock(struct peer *peer, const btc_msg_merkleblock *blk);
+int peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf);
+int peergroup_handle_block(struct peer *peer, const btc_msg_block *blk);
 void peergroup_handle_addr(struct peer *peer, btc_msg_address **addrs,
                           size_t numAddrs);
 int peergroup_lookup_broadcast_tx(struct peergroup *pg, const uint256 *hash,
