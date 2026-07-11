@@ -47,6 +47,7 @@ struct peergroup {
    struct cfheaderstore *cfStore;
    int                   cfScanHeight;     /* next height to request cfilters for */
    int                   cfTipHeight;      /* height of the last cfilter we requested */
+   int                   cfVerified;       /* number of cfilters verified so far */
    int                   cfhdrStartHeight;  /* next height to request cfheaders for */
    int                   cfhdrTipHeight;    /* target height for cfheader sync */
    uint256               cfhdrPrevHeader;   /* prevFilterHeader for the next batch */

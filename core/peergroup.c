@@ -311,9 +311,20 @@ peergroup_add_peer(struct peer_addr *paddr)
 static void
 peergroup_download_progress(void)
 {
-   struct peergroup *peerGroup = btc->peerGroup;
-   bitcui_set_catchup_info(peerGroup->numHdrFetched, peerGroup->numHdrToFetch,
-                          peerGroup->numFetched,    peerGroup->numToFetch);
+   struct peergroup *pg = btc->peerGroup;
+
+   /*
+    * In the BIP157 path, report cfilter scan progress (how many cfilters
+    * have been verified) instead of the legacy numFetched/numToFetch
+    * (which count matched blocks, not filters scanned).
+    */
+   if (!pg->useBip37 && pg->cfTipHeight >= 0) {
+      bitcui_set_catchup_info(pg->numHdrFetched, pg->numHdrToFetch,
+                             pg->cfVerified, pg->cfTipHeight);
+   } else {
+      bitcui_set_catchup_info(pg->numHdrFetched, pg->numHdrToFetch,
+                             pg->numFetched,    pg->numToFetch);
+   }
 }
 
 
@@ -510,6 +521,9 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
       }
       Log(LGPFX" BIP157: cfilter verified at height %d.\n", blockHeight);
    }
+
+   pg->cfVerified++;
+   peergroup_download_progress();
 
    /*
     * GCS-match the filter against the wallet's scriptPubKeys.
@@ -1597,6 +1611,7 @@ peergroup_init(struct config *config,
    pg->useBip37      = config_getbool(config, FALSE, "network.useBip37");
    pg->cfScanHeight = -1;
    pg->cfTipHeight   = -1;
+   pg->cfVerified     = 0;
    pg->cfhdrStartHeight = -1;
    pg->cfhdrTipHeight   = -1;
    uint256_zero_out(&pg->cfhdrPrevHeader);
