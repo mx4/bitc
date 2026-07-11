@@ -9,7 +9,7 @@ compile_commands.json
 lldb
 tags
 cscope*
-*core*
+core.*
 log*
-vgcore*
+vgcore.*
 *dSYM
