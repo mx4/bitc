@@ -443,12 +443,7 @@ config_getint64(struct config *config,
 
    if (e) {
       if (e->type == CONFIG_KV_UNKNOWN) {
-#ifdef __CYGWIN__
-         int64 v = atol(e->u.str);
-         NOT_TESTED();
-#else
          int64 v = atoll(e->u.str);
-#endif
          free(e->u.str);
          e->u.val = v;
          e->type = CONFIG_KV_INT64;

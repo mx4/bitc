@@ -1,11 +1,6 @@
 #ifndef __UTIL_H__
 #define __UTIL_H__
 
-#ifdef __CYGWIN__
-#include <stddef.h>
-#include <sys/types.h>
-#endif
-
 #include "basic_defs.h"
 
 void Panic(const char *format, ...) PRINTF_GCC_DECL(1, 2) NORETURN;

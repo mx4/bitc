@@ -402,16 +402,7 @@ file_pwrite(const struct file_descriptor *desc,
    }
 
    do {
-#ifdef __CYGWIN__
-	   NOT_TESTED();
-      res = lseek(desc->fd, 0, SEEK_SET);
-      if (res < 0) {
-         break;
-      } 
-      res = write(desc->fd, buf, len);
-#else
       res = pwrite(desc->fd, buf, len, offset);
-#endif
    } while (res == -1 && (errno == EAGAIN || errno == EINTR));
 
    if (res == -1) {
@@ -449,16 +440,7 @@ file_pread(const struct file_descriptor *desc,
    }
 
    do {
-#ifdef __CYGWIN__
-	   NOT_TESTED();
-      res = lseek(desc->fd, 0, SEEK_SET);
-      if (res < 0) {
-         break;
-      } 
-      res = read(desc->fd, buf, len);
-#else
       res = pread(desc->fd, buf, len, offset);
-#endif
    } while (res == -1 && (errno == EAGAIN || errno == EINTR));
 
    if (res == -1) {
