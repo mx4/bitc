@@ -4,6 +4,8 @@ gmon*
 .~
 *.swp
 bitc
+fuzz-parse
+compile_commands.json
 lldb
 tags
 cscope*
