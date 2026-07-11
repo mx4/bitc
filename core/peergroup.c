@@ -1212,28 +1212,52 @@ peergroup_notify_peer_gone(struct peer *peer)
    struct peergroup *pg = btc->peerGroup;
    struct circlist_item *li;
 
-   if (pg == NULL || pg->cfcheckptVerified || pg->cfcheckptPeers == 0) {
-      return;
-   }
-   if (pg->cfcheckptAgreed >= pg->cfcheckptPeers) {
+   if (pg == NULL) {
       return;
    }
 
-   pg->cfcheckptPeers--;
-   log_warn(LGPFX" BIP157: %s gone while awaiting cfcheckpt; "
-           "lowering target to %d.\n", peer_name(peer), pg->cfcheckptPeers);
+   /*
+    * Case 1: mid cfcheckpt verification, waiting on a response from this
+    * peer that can no longer arrive. Revise the target down instead of
+    * hanging forever on an unmet count.
+    */
+   if (!pg->cfcheckptVerified && pg->cfcheckptPeers > 0 &&
+       pg->cfcheckptAgreed < pg->cfcheckptPeers) {
+      pg->cfcheckptPeers--;
+      log_warn(LGPFX" BIP157: %s gone while awaiting cfcheckpt; "
+              "lowering target to %d.\n", peer_name(peer), pg->cfcheckptPeers);
 
-   if (pg->cfcheckptAgreed < 1) {
-      /* Nobody has responded yet; nothing to drive cfheader sync with. */
-      return;
+      if (pg->cfcheckptAgreed >= 1) {
+         /* Use any other connected peer as the driver for the next step. */
+         CIRCLIST_SCAN(li, pg->peer_list) {
+            struct peer *cand = peer_from_li(li);
+            if (cand != peer && peer_is_connected(li)) {
+               peergroup_cfcheckpt_maybe_complete(cand);
+               break;
+            }
+         }
+      }
    }
 
-   /* Use any other connected peer as the driver for the next step. */
-   CIRCLIST_SCAN(li, pg->peer_list) {
-      struct peer *cand = peer_from_li(li);
-      if (cand != peer && peer_is_connected(li)) {
-         peergroup_cfcheckpt_maybe_complete(cand);
-         return;
+   /*
+    * Case 2: this peer was the cfilter/cfheader batch driver and got reset
+    * to 0 outstanding responses by peer_destroy (see there) because it
+    * disconnected mid-stream. Resume with another connected peer so the
+    * scan doesn't wedge forever waiting for a batch-drained event from a
+    * peer that no longer exists.
+    */
+   if (btc->state == BITC_STATE_UPDATE_TXDB && pg->cfBatchRemaining == 0 &&
+       pg->downloadPeer == NULL && pg->cfcheckptVerified &&
+       pg->cfScanHeight <= pg->cfTipHeight) {
+      CIRCLIST_SCAN(li, pg->peer_list) {
+         struct peer *cand = peer_from_li(li);
+         if (cand != peer && peer_is_connected(li)) {
+            log_warn(LGPFX" BIP157: resuming cfilter scan via %s after "
+                    "driver disconnect.\n", peer_name(cand));
+            pg->downloadPeer = cand;
+            peergroup_request_cfilters(cand);
+            break;
+         }
       }
    }
 }

@@ -540,13 +540,32 @@ peer_destroy(struct circlist_item *li,
     * next peer to connect can take over (see peergroup_download_headers).
     */
    if (btc->peerGroup && btc->peerGroup->downloadPeer == peer) {
+      bool wasCfilterDriver = btc->peerGroup->cfBatchRemaining > 0;
+
       btc->peerGroup->downloadPeer = NULL;
+
+      /*
+       * This peer was mid-stream on a getcfilters batch (cfBatchRemaining
+       * outstanding responses) when it disconnected. The rest of that batch
+       * will never arrive, and nothing else re-requests it, which otherwise
+       * wedges the whole cfilter scan forever waiting for a batch-drained
+       * event that can no longer happen. Reset the count and let
+       * peergroup_notify_peer_gone below try to resume with another peer.
+       */
+      if (wasCfilterDriver) {
+         log_warn(LGPFX" %s: was cfilter batch driver (%d responses still "
+                 "outstanding); resetting batch.\n",
+                 peer->name, btc->peerGroup->cfBatchRemaining);
+         btc->peerGroup->cfBatchRemaining = 0;
+      }
    }
 
    /*
     * If we're mid cfcheckpt verification and were waiting on a response from
     * this peer, it can no longer answer -- revise the target down instead of
-    * hanging forever (see peergroup_notify_peer_gone).
+    * hanging forever. If a cfilter batch was just reset above, this also
+    * tries to resume the scan with another connected peer (see
+    * peergroup_notify_peer_gone).
     */
    peergroup_notify_peer_gone(peer);
 
