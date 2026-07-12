@@ -896,6 +896,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
 
          pg->cfScanHeight  = startHeight;
          pg->cfTipHeight   = tipHeight;
+         pg->cfVerified     = startHeight;
 
          /*
           * Initialize cfheader sync: start from the tip of the stored
