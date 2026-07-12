@@ -799,7 +799,7 @@ peergroup_download_headers(struct peer *peer,
  *------------------------------------------------------------------------
  */
 
-#define CFILTER_BATCH 1000  /* max cfilters per getcfilters request */
+#define CFILTER_BATCH 1000  /* max cfilters per getcfilters request (BIP157 limit) */
 
 static int
 peergroup_download_filtered_blocks(struct peer *peer)
@@ -1181,19 +1181,24 @@ peergroup_notify_peer_gone(struct peer *peer)
     * to 0 outstanding responses by peer_destroy (see there) because it
     * disconnected mid-stream. Resume with another connected peer so the
     * scan doesn't wedge forever waiting for a batch-drained event from a
-    * peer that no longer exists.
+    * peer that no longer exists. Only trigger when cfDriverGone is set
+    * (i.e., the disconnecting peer was actually the batch driver), not for
+    * every unrelated peer disconnect.
     */
-   if (btc->state == BITC_STATE_UPDATE_TXDB && pg->cfBatchRemaining == 0 &&
-       pg->downloadPeer == NULL && pg->cfcheckptVerified &&
-       pg->cfScanHeight <= pg->cfTipHeight) {
-      CIRCLIST_SCAN(li, pg->peer_list) {
-         struct peer *cand = peer_from_li(li);
-         if (cand != peer && peer_is_connected(li)) {
-            log_warn(LGPFX" BIP157: resuming cfilter scan via %s after "
-                    "driver disconnect.\n", peer_name(cand));
-            pg->downloadPeer = cand;
-            peergroup_request_cfilters(cand);
-            break;
+   if (pg->cfDriverGone) {
+      pg->cfDriverGone = 0;
+      if (btc->state == BITC_STATE_UPDATE_TXDB &&
+          pg->downloadPeer == NULL && pg->cfcheckptVerified &&
+          pg->cfScanHeight <= pg->cfTipHeight) {
+         CIRCLIST_SCAN(li, pg->peer_list) {
+            struct peer *cand = peer_from_li(li);
+            if (cand != peer && peer_is_connected(li)) {
+               log_warn(LGPFX" BIP157: resuming cfilter scan via %s after "
+                       "driver disconnect.\n", peer_name(cand));
+               pg->downloadPeer = cand;
+               peergroup_request_cfilters(cand);
+               break;
+            }
          }
       }
    }
@@ -1956,6 +1961,7 @@ peergroup_init(struct config *config,
    pg->cfcheckptAgreed   = 0;
    pg->cfcheckptVerified = 0;
    pg->cfhdrSyncStarted  = 0;
+   pg->cfDriverGone      = 0;
 
    /*
     * Open the compact-filter header store.

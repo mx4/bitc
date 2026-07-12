@@ -101,6 +101,7 @@ struct peergroup {
    int                   cfcheckptAgreed;    /* number of peers that agreed */
    bool                  cfcheckptVerified;  /* true once at least one peer agreed */
    bool                  cfhdrSyncStarted;   /* true once getcfheaders has been sent */
+   bool                  cfDriverGone;       /* set when the cfilter batch driver disconnects mid-stream */
 };
 
 

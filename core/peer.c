@@ -505,14 +505,15 @@ peer_destroy(struct circlist_item *li,
        * outstanding responses) when it disconnected. The rest of that batch
        * will never arrive, and nothing else re-requests it, which otherwise
        * wedges the whole cfilter scan forever waiting for a batch-drained
-       * event that can no longer happen. Reset the count and let
-       * peergroup_notify_peer_gone below try to resume with another peer.
+       * event that can no longer happen. Reset the count and signal
+       * peergroup_notify_peer_gone to resume with another peer.
        */
-      if (wasCfilterDriver) {
+      if (wasCfilterDriver && !btc->peerGroup->cfDriverGone) {
          log_warn(LGPFX" %s: was cfilter batch driver (%d responses still "
                  "outstanding); resetting batch.\n",
                  peer->name, btc->peerGroup->cfBatchRemaining);
          btc->peerGroup->cfBatchRemaining = 0;
+         btc->peerGroup->cfDriverGone = 1;
       }
    }
 
