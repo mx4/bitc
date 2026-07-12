@@ -18,7 +18,6 @@
 #include "config.h"
 #include "txdb.h"
 #include "hash.h"
-#include "bloom.h"
 #include "bitc_ui.h"
 #include "btc-message.h"
 #include "hashtable.h"
@@ -50,7 +49,6 @@ struct wallet {
    struct secure_area     *pass;
    struct crypt_key       *ckey;
    struct secure_area     *ckey_store;
-   struct bloom_filter    *filter;
 };
 
 
@@ -639,61 +637,6 @@ exit:
 /*
  *------------------------------------------------------------------------
  *
- * wallet_update_filter_cb --
- *
- *------------------------------------------------------------------------
- */
-
-static void
-wallet_update_filter_cb(const void *key,
-                        size_t len,
-                        void *cbData,
-                        void *keyData)
-{
-   struct bloom_filter *filter = (struct bloom_filter *)cbData;
-   struct wallet_key *wkey = (struct wallet_key *)keyData;
-
-   bloom_add(filter, &wkey->pub_key, sizeof wkey->pub_key);
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
- * wallet_update_filter --
- *
- *------------------------------------------------------------------------
- */
-
-static void
-wallet_update_filter(const struct wallet *wallet,
-                     struct bloom_filter *filter)
-{
-   hashtable_for_each(wallet->hash_keys, wallet_update_filter_cb, filter);
-}
-
-
-/*
- *----------------------------------------------------------------
- *
- * wallet_filter_init --
- *
- *----------------------------------------------------------------
- */
-
-static void
-wallet_filter_init(struct wallet *wallet)
-{
-   ASSERT(wallet->filter == NULL);
-   wallet->filter = bloom_create(10, 0.001);
-
-   wallet_update_filter(wallet, wallet->filter);
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
  * wallet_lookup_pubkey --
  *
  *      Should really be called _pubkeyhash.
@@ -912,7 +855,6 @@ wallet_open(struct config      *config,
 
    wallet->balance = txdb_get_balance(wallet->txdb);
    wallet_print(wallet);
-   wallet_filter_init(wallet);
 
    if (btcui->inuse) {
       struct bitcui_addr *addrs;
@@ -933,23 +875,6 @@ exit:
 }
 
 
-/*
- *------------------------------------------------------------------------
- *
- * wallet_get_bloom_filter_info --
- *
- *------------------------------------------------------------------------
- */
-
-void
-wallet_get_bloom_filter_info(const struct wallet *wallet,
-                             uint8              **filter,
-                             uint32              *filterSize,
-                             uint32              *numHashFuncs,
-                             uint32              *tweak)
-{
-   bloom_getinfo(wallet->filter, filter, filterSize, numHashFuncs, tweak);
-}
 
 
 /*
@@ -1190,8 +1115,6 @@ wallet_close(struct wallet *wallet)
    if (wallet == NULL) {
       return;
    }
-   bloom_free(wallet->filter);
-   wallet->filter = NULL;
    txdb_close(wallet->txdb);
    hashtable_clear_with_callback(wallet->hash_keys, wallet_free_key_cb);
    hashtable_destroy(wallet->hash_keys);
@@ -1199,26 +1122,6 @@ wallet_close(struct wallet *wallet)
    secure_free(wallet->ckey_store);
    memset(wallet, 0, sizeof *wallet);
    free(wallet);
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
- * wallet_confirm_tx_in_block --
- *
- *------------------------------------------------------------------------
- */
-
-void
-wallet_confirm_tx_in_block(struct wallet *wallet,
-                           const btc_msg_merkleblock *blk)
-{
-   int i;
-
-   for (i = 0; i < blk->matchedTxCount; i++) {
-      txdb_confirm_one_tx(wallet->txdb, &blk->blkHash, blk->matchedTxHash + i);
-   }
 }
 
 

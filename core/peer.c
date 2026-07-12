@@ -89,8 +89,6 @@ struct peer {
    struct buff             recvBuf;
    struct buff            *sendBuf;
 
-   uint256                 last_merkle_block;
-
    mtime_t                 last_ts;
    uint64                  pingNonce;
    bool                    connected;
@@ -274,34 +272,7 @@ peer_send_getheaders(struct peer *peer)
 /*
  *------------------------------------------------------------------------
  *
- * peer_send_filterload --
- *
- *------------------------------------------------------------------------
- */
-
-static int
-peer_send_filterload(struct peer *peer)
-{
-   btc_msg_filterload fl;
-   int res;
-
-   wallet_get_bloom_filter_info(btc->wallet, &fl.filter, &fl.filterSize,
-                                &fl.numHashFuncs, &fl.tweak);
-
-   fl.flags = BLOOM_UPDATE_P2PUBKEY_ONLY;
-
-   res = btcmsg_craft_filterload(&fl, &peer->sendBuf);
-   if (res) {
-      return res;
-   }
-   return peer_send_msg(peer, BTC_MSG_FILTERLOAD);
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
- * peer_send_getdata --
+ * peer_handshake_ok --
  *
  *------------------------------------------------------------------------
  */
@@ -465,21 +436,6 @@ static int
 peer_handshake_ok(struct peer *peer)
 {
    int res;
-
-   /*
-    * BIP37 bloom filtering is disabled by default on modern nodes
-    * (peerbloomfilters=0 since Bitcoin Core 0.19), and such nodes drop peers
-    * that send 'filterload'. Only send it to peers advertising NODE_BLOOM when
-    * the legacy BIP37 path is explicitly enabled; the default path is BIP157
-    * compact block filters.
-    */
-   if (btc->peerGroup->useBip37 &&
-       (peer->services & BTC_SERVICE_NODE_BLOOM)) {
-      res = peer_send_filterload(peer);
-      if (res) {
-         return res;
-      }
-   }
 
    /* the below should always be true */
    ASSERT(peer->protversion >= BTC_PROTO_ADDR_W_TIME);
@@ -788,7 +744,6 @@ peer_handle_getdata(struct peer *peer)
             goto exit;
          }
          break;
-      case INV_TYPE_MSG_FILTERED_BLOCK:
       case INV_TYPE_MSG_BLOCK:
       default:
          NOT_TESTED();
@@ -838,56 +793,11 @@ peer_handle_tx(struct peer *peer)
    buf = buff_base(&peer->recvBuf);
    len = buff_maxlen(&peer->recvBuf);
 
-   res = wallet_handle_tx(btc->wallet, &peer->last_merkle_block, buf, len);
+   res = wallet_handle_tx(btc->wallet, NULL, buf, len);
    ASSERT(res == 0);
 
    return res;
 }
-
-
-/*
- *------------------------------------------------------------------------
- *
- * peer_handle_merkleblock --
- *
- *------------------------------------------------------------------------
- */
-
-static int
-peer_handle_merkleblock(struct peer *peer)
-{
-   btc_msg_merkleblock *blk;
-   int res;
-
-   res = btcmsg_parse_merkleblock(&peer->recvBuf, &blk);
-   if (res) {
-      NOT_TESTED();
-      return res;
-   }
-
-   res = peergroup_handle_merkleblock(peer, blk);
-   if (res == 0) {
-      memcpy(&peer->last_merkle_block, &blk->blkHash, sizeof blk->blkHash);
-   }
-
-   /*
-    * If for some reasons we received a block and we don't know its parent, we
-    * need to ask the peer for all of this block's parents we don't know about.
-    */
-   if (!blockstore_is_block_known(btc->blockStore, &blk->header.prevBlock)) {
-      char hashStr0[80];
-      char hashStr1[80];
-      uint256_snprintf_reverse(hashStr1, sizeof hashStr1, &blk->header.prevBlock);
-      uint256_snprintf_reverse(hashStr0, sizeof hashStr0, &blk->blkHash);
-      NOT_TESTED();
-      log_info(LGPFX" %s: got %s parent unknown %s\n",
-          peer->name, hashStr0, hashStr1);
-      peer_send_getblocks(peer);
-   }
-   btc_msg_merkleblock_free(blk);
-   return res;
-}
-
 
 
 /*
@@ -1040,7 +950,7 @@ peer_handle_inv(struct peer *peer)
             uint256_snprintf_reverse(hashStr, sizeof hashStr, &inv[i].hash);
             log_info(LGPFX" %s: inv block %s\n", peer->name, hashStr);
             hash[numHash] = inv[i].hash;
-            type[numHash++] = INV_TYPE_MSG_FILTERED_BLOCK;
+            type[numHash++] = INV_TYPE_MSG_BLOCK;
          }
          break;
       case INV_TYPE_MSG_TX:
@@ -1056,10 +966,8 @@ peer_handle_inv(struct peer *peer)
             type[numHash++] = INV_TYPE_MSG_TX;
          }
          break;
-      case INV_TYPE_MSG_FILTERED_BLOCK:
-         numfblk++;
-         NOT_TESTED();
-         goto exit;
+      default:
+         break;
       }
    }
    LOG(1, (LGPFX" %s: handling inv msg: tx=%2d blk=%2d numfblk=%d numHash=%d\n",
@@ -1070,13 +978,12 @@ peer_handle_inv(struct peer *peer)
          uint256_snprintf_reverse(hashStr, sizeof hashStr, hash + i);
          log_info(LGPFX" %s: [%d / %d] requesting %s %s\n",
              peer->name, i, numHash,
-             type[i] == INV_TYPE_MSG_FILTERED_BLOCK ? "block" : "tx",
+             type[i] == INV_TYPE_MSG_BLOCK ? "block" : "tx",
              hashStr);
          res = peer_send_getdata(peer, type[i], hash + i, 1);
       }
    }
 
-exit:
    free(type);
    free(hash);
    free(inv);
@@ -1148,11 +1055,7 @@ peer_handle_version(struct peer *peer)
    }
    if (version.services & BTC_SERVICE_NODE_COMPACT_FILTERS) {
       log_info(LGPFX" %s: supports BIP157 compact filters.\n", peer->name);
-   } else if (btc->peerGroup && !btc->peerGroup->useBip37) {
-      /*
-       * We're in BIP157 mode and this peer doesn't serve compact filters.
-       * Keep it for header sync, but log that it can't help with tx discovery.
-       */
+   } else {
       log_info(LGPFX" %s: no compact filter support (services=%#llx); "
           "will use for headers only.\n",
           peer->name, (unsigned long long)version.services);
@@ -1400,7 +1303,6 @@ peer_receive_cb(struct netasync_socket *sock,
    case BTC_MSG_GETBLOCKS:   res = peer_handle_getblocks(peer);  break;
    case BTC_MSG_GETDATA:     res = peer_handle_getdata(peer);    break;
    case BTC_MSG_BLOCK:       res = peer_handle_block(peer);      break;
-   case BTC_MSG_MERKLEBLOCK: res = peer_handle_merkleblock(peer);break;
    case BTC_MSG_TX:          res = peer_handle_tx(peer);         break;
    case BTC_MSG_ALERT:       res = peer_handle_alert(peer);      break;
    case BTC_MSG_NOTFOUND:    res = peer_handle_notfound(peer);   break;
@@ -1432,9 +1334,7 @@ peer_receive_cb(struct netasync_socket *sock,
       break;
    }
 next:
-   if (msg != BTC_MSG_MERKLEBLOCK && msg != BTC_MSG_TX) {
-      uint256_zero_out(&peer->last_merkle_block);
-   }
+   /* No merkleblock tracking needed in BIP157 mode. */
    if (res != 0) {
       log_warn(LGPFX" %s: failed msg handling: %s (%s) payloadLength=%zu\n",
               peer->name, btcmsg_type_to_str(msg), peer->clientStr,
@@ -1520,7 +1420,6 @@ peer_add(struct peer_addr *paddr,
    peer->clientStr = safe_strdup("");
    peer->pingNonce = 0xdead0000;
    snprintf(peer->name, sizeof peer->name, "peer_%05u", seq);
-   ASSERT(uint256_iszero(&peer->last_merkle_block));
 
    ASSERT(paddr->connected == 0);
    paddr->connected = 1;

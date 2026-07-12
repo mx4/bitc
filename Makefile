@@ -137,7 +137,6 @@ BTC_FILES += core/peergroup.c
 BTC_FILES += core/addrbook.c
 BTC_FILES += core/block-store.c
 BTC_FILES += core/base58.c
-BTC_FILES += core/bloom.c
 BTC_FILES += core/key.c
 BTC_FILES += core/txdb.c
 BTC_FILES += core/wallet.c

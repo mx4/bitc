@@ -93,8 +93,6 @@ fuzz_one(uint8 *bytes, size_t len)
      if (btcmsg_parse_inv(&b, &inv, &n) == 0) free(inv); }
    { WRAP(); btc_block_header *h = NULL; int n = 0;
      if (btcmsg_parse_headers(&b, &h, &n) == 0) free(h); }
-   { WRAP(); btc_msg_merkleblock *m = NULL;
-     if (btcmsg_parse_merkleblock(&b, &m) == 0) btc_msg_merkleblock_free(m); }
    { WRAP(); btc_msg_block blk; memset(&blk, 0, sizeof blk);
      if (btcmsg_parse_block(&b, &blk) == 0) btc_msg_block_free(&blk); }
    { WRAP(); struct btc_msg_address **a = NULL; size_t na = 0;

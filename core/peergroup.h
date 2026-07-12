@@ -101,7 +101,6 @@ struct peergroup {
    int                   cfcheckptAgreed;    /* number of peers that agreed */
    bool                  cfcheckptVerified;  /* true once at least one peer agreed */
    bool                  cfhdrSyncStarted;   /* true once getcfheaders has been sent */
-   bool                  useBip37;          /* legacy BIP37 fallback (default false) */
 };
 
 
@@ -120,7 +119,6 @@ void peergroup_queue_peerlist(struct circlist_item *li);
 void peergroup_notify_peer_gone(struct peer *peer);
 
 int peergroup_handle_handshake_ok(struct peer *peer, int peerStartingHeight);
-int peergroup_handle_merkleblock(struct peer *peer, const btc_msg_merkleblock *blk);
 int peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf);
 int peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh);
 int peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc);

@@ -33,13 +33,10 @@ uint64 wallet_get_birth(const struct wallet *wallet);
 bool wallet_is_pubkey_hash160_mine(const struct wallet *wallet, const uint160 *pub_key);
 bool wallet_is_pubkey_spendable(const struct wallet *wallet, const uint160 *pub_key);
 int  wallet_craft_tx(struct wallet *wlt, const struct btc_tx_desc *tx_desc, btc_msg_tx *tx);
-void wallet_confirm_tx_in_block(struct wallet *wallet, const btc_msg_merkleblock *blk);
 struct key * wallet_lookup_pubkey(const struct wallet *wallet, const uint160 *pub_key);
 bool wallet_verify(struct secure_area *pass, enum wallet_state *wlt_state);
 int wallet_encrypt(struct wallet *wallet, struct secure_area *pass);
-void wallet_get_bloom_filter_info(const struct wallet *wallet,
-                                  uint8 **filter, uint32 *filterSize,
-                                  uint32 *numHashFuncs, uint32 *tweak);
+
 
 /*
  * BIP158: collect the scriptPubKeys to test against compact block filters.

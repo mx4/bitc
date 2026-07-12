@@ -336,7 +336,7 @@ peergroup_download_progress(void)
     * have been verified) instead of the legacy numFetched/numToFetch
     * (which count matched blocks, not filters scanned).
     */
-   if (!pg->useBip37 && pg->cfTipHeight >= 0) {
+   if (pg->cfTipHeight >= 0) {
       bitcui_set_catchup_info(pg->numHdrFetched, pg->numHdrToFetch,
                              pg->cfVerified, pg->cfTipHeight);
    } else {
@@ -429,52 +429,6 @@ peergroup_add_block_finalize(struct blockstore *bs,
        (blockstore_get_height(bs) % 2000) == 0) {
       bitcui_set_last_block_info(&best_hash, blockstore_get_height(bs),
                                  blockstore_get_timestamp(btc->blockStore));
-   }
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
- * peergroup_process_filtered_block --
- *
- *------------------------------------------------------------------------
- */
-
-static void
-peergroup_process_filtered_block(struct peer *peer,
-                                 const btc_msg_merkleblock *blk)
-{
-   struct blockstore *bs = btc->blockStore;
-   struct peergroup *pg = btc->peerGroup;
-   uint256 lastTxdb;
-   bool orphan;
-   bool s;
-
-   ASSERT(btc->state == BITC_STATE_UPDATE_TXDB ||
-          btc->state == BITC_STATE_READY);
-
-   peergroup_get_lastblk(pg, &lastTxdb);
-   ASSERT(!uint256_iszero(&lastTxdb));
-
-   if (btc->state == BITC_STATE_UPDATE_TXDB &&
-       blockstore_is_next(bs, &lastTxdb, &blk->blkHash)) {
-      pg->numFetched++;
-      peergroup_set_lastblk(pg, &blk->blkHash);
-      if ((pg->numFetched % 5000) == 0) {
-         log_warn(LGPFX" fetched %6d blocks out of %d\n",
-                 pg->numFetched, pg->numToFetch);
-      }
-   }
-
-   s = blockstore_add_header(bs, &blk->header, &blk->blkHash, &orphan);
-   if (orphan) {
-      char hashStr[80];
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, &blk->blkHash);
-      bitcui_set_status("Block %s orphaned", hashStr);
-   }
-   if (s) {
-      peergroup_add_block_finalize(bs, FALSE /* full block */);
    }
 }
 
@@ -834,8 +788,7 @@ peergroup_download_headers(struct peer *peer,
  *      against the wallet's scriptPubKeys; matching blocks are fetched via
  *      getdata(MSG_BLOCK).
  *
- *      Legacy BIP37 path (filterload + merkleblock) is used when
- *      pg->useBip37 is true.
+ *      BIP157 compact-filter sync is the default and only path.
  *
  *------------------------------------------------------------------------
  */
@@ -850,11 +803,8 @@ peergroup_download_filtered_blocks(struct peer *peer)
    uint256 walletHash;
    uint256 lastHashStore;
    uint256 startHash;
-   uint256 *nextHash;
    uint64 birth;
    bool first;
-   int res = 0;
-   int n;
 
    if (btc->state != BITC_STATE_UPDATE_HEADERS &&
        btc->state != BITC_STATE_UPDATE_TXDB) {
@@ -934,7 +884,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
       /*
        * BIP157: initialize the cfilter scan height from the start hash.
        */
-      if (!pg->useBip37) {
+      if (1) {
          int startHeight = blockstore_get_block_height(bs, &startHash);
          int tipHeight = blockstore_get_height(bs);
 
@@ -973,26 +923,6 @@ peergroup_download_filtered_blocks(struct peer *peer)
    }
 
    peergroup_download_progress();
-
-   if (pg->useBip37) {
-      /*
-       * Legacy BIP37 path: request merkleblocks via getdata.
-       */
-      log_info(LGPFX" downloading %d filtered block%s (BIP37)..\n",
-          pg->numToFetch, pg->numToFetch > 1 ? "s" : "");
-      blockstore_get_next_hashes(bs, &startHash, &nextHash, &n);
-
-      if (n >= 1) {
-         pg->lastFilteredBlockReq = nextHash[n - 1];
-         res = peer_send_getdata(peer, INV_TYPE_MSG_FILTERED_BLOCK,
-                                 nextHash, n);
-         ASSERT(res == 0);
-      } else {
-         peergroup_download_complete();
-      }
-      free(nextHash);
-      return res;
-   }
 
    /*
     * BIP157 path: first verify cfcheckpts across peers, then sync cfheaders,
@@ -1487,73 +1417,6 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
    log_info(LGPFX" BIP157: cfheader sync complete to height %d.\n",
        pg->cfhdrTipHeight);
    return peergroup_request_cfilters(peer);
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
- * peergroup_download_filtered_blocks_continue --
- *
- *------------------------------------------------------------------------
- */
-
-static int
-peergroup_download_filtered_blocks_continue(struct peer *peer)
-{
-   uint256 best_hash;
-   uint256 lastTxdb;
-   int res = 0;
-
-   ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
-
-   peergroup_download_progress();
-   blockstore_get_best_hash(btc->blockStore, &best_hash);
-   peergroup_get_lastblk(btc->peerGroup, &lastTxdb);
-
-   if (uint256_issame(&lastTxdb, &best_hash)) {
-      peergroup_download_complete();
-      return 0;
-   }
-
-   if (btc->peerGroup->useBip37) {
-      /*
-       * Legacy BIP37 path: request the next batch of merkleblocks.
-       */
-      if (uint256_issame(&lastTxdb, &btc->peerGroup->lastFilteredBlockReq)) {
-         uint256 *nextHash;
-         int n;
-
-         blockstore_get_next_hashes(btc->blockStore, &lastTxdb, &nextHash, &n);
-
-         log_info(LGPFX" %s: querying %d blocks: %u processed out of %d\n",
-             peer_name(peer), n, btc->peerGroup->numFetched,
-             btc->peerGroup->numToFetch);
-
-         ASSERT(n > 0);
-         btc->peerGroup->lastFilteredBlockReq = nextHash[n - 1];
-
-         res = peer_send_getdata(peer, INV_TYPE_MSG_FILTERED_BLOCK, nextHash, n);
-         free(nextHash);
-      }
-      return res;
-   }
-
-   /*
-    * BIP157 path: request the next batch of cfilters.
-    */
-   if (btc->peerGroup->cfScanHeight <= btc->peerGroup->cfTipHeight) {
-      return peergroup_request_cfilters(peer);
-   }
-
-   /*
-    * All cfilters requested and all matched blocks received.
-    * Check if we've caught up to the tip.
-    */
-   if (uint256_issame(&lastTxdb, &best_hash)) {
-      peergroup_download_complete();
-   }
-   return 0;
 }
 
 
@@ -2073,7 +1936,6 @@ peergroup_init(struct config *config,
    pg->startTS       = time_get();
    pg->maxActive     = maxPeers;
    pg->minActiveInit = minPeersInit;
-   pg->useBip37      = config_getbool(config, FALSE, "network.useBip37");
    pg->cfScanHeight = -1;
    pg->cfTipHeight   = -1;
    pg->cfVerified     = 0;
@@ -2644,30 +2506,3 @@ peergroup_handle_addr(struct peer      *peer,
    }
 }
 
-
-/*
- *------------------------------------------------------------------------
- *
- * peergroup_handle_merkleblock --
- *
- *------------------------------------------------------------------------
- */
-
-int
-peergroup_handle_merkleblock(struct peer *peer,
-                             const btc_msg_merkleblock *blk)
-{
-   ASSERT(btc->state == BITC_STATE_READY ||
-          btc->state == BITC_STATE_UPDATE_TXDB);
-
-   peergroup_process_filtered_block(peer, blk);
-   wallet_confirm_tx_in_block(btc->wallet, blk);
-
-   if (btc->state == BITC_STATE_READY) {
-      return 0;
-   }
-
-   ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
-
-   return peergroup_download_filtered_blocks_continue(peer);
-}

@@ -18,7 +18,6 @@ void btcmsg_print_txin(const btc_msg_tx_in *txIn);
 
 int btcmsg_craft_version(struct buff **buf);
 int btcmsg_craft_verack(struct buff **buf);
-int btcmsg_craft_filterload(const btc_msg_filterload *fl, struct buff **buf);
 int btcmsg_craft_getaddr(struct buff **buf);
 int btcmsg_craft_mempool(struct buff **buf);
 int btcmsg_craft_getblocks(const uint256 *hashes, int n, struct buff **bufOut);
@@ -43,7 +42,6 @@ int btcmsg_parse_pingpong(uint32 protversion, struct buff *buf, uint64 *nonce);
 int btcmsg_parse_inv(struct buff *buf, btc_msg_inv **invOut, int *num);
 int btcmsg_parse_headers(struct buff *buf, btc_block_header **h, int *num);
 int btcmsg_parse_block(struct buff *buf, btc_msg_block *blk);
-int btcmsg_parse_merkleblock(struct buff *buf, btc_msg_merkleblock **blkOut);
 int btcmsg_parse_addr(uint32 prot, struct buff *buf,
                       struct btc_msg_address ***addrs, size_t *numAddrs);
 
@@ -56,7 +54,6 @@ void btc_msg_tx_init(btc_msg_tx *tx);
 uint64 btc_msg_tx_value(const btc_msg_tx *tx);
 
 void btc_msg_block_free(btc_msg_block *blk);
-void btc_msg_merkleblock_free(btc_msg_merkleblock *blk);
 
 /* BIP157 compact filter messages. */
 int  btcmsg_craft_getcfilters(const btc_msg_getcfilters *g, struct buff **bufOut);
