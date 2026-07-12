@@ -498,6 +498,18 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    peergroup_download_progress();
 
    /*
+    * Persist progress: update lastBlk to this cfilter's block hash so the
+    * periodic save (and clean exit) writes a resume point that reflects
+    * how far the cfilter scan has actually gotten. The cfilter stream is
+    * sequential (getcfilters requests a contiguous range), so this is
+    * always the furthest-verified height. Without this, lastBlk stays at
+    * its initial value (zero or stale) because the old 'blockstore_is_next'
+    * check in the no-match path below almost never fires for out-of-order
+    * blocks, and an interrupted run restarts from scratch.
+    */
+   peergroup_set_lastblk(pg, &blockHash);
+
+   /*
     * One response for the current getcfilters batch has now been consumed,
     * regardless of what we do with it below (match, no match, or an early
     * skip). Decrement here, once, unconditionally, so every code path below
@@ -564,15 +576,9 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
       }
    } else {
       /*
-       * No match: advance the lastblk pointer if this block is next in
-       * chain.
+       * No match: lastBlk was already advanced above (every verified
+       * cfilter updates it, regardless of match status).
        */
-      uint256 lastTxdb;
-      peergroup_get_lastblk(pg, &lastTxdb);
-      if (btc->state == BITC_STATE_UPDATE_TXDB &&
-          blockstore_is_next(bs, &lastTxdb, &blockHash)) {
-         peergroup_set_lastblk(pg, &blockHash);
-      }
    }
 
    /*
