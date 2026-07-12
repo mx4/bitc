@@ -484,10 +484,22 @@ peer_destroy(struct circlist_item *li,
 
    ASSERT(peer);
 
+   /*
+    * Guard against double-destroy: the network layer may have already torn
+    * down this peer (e.g. socket closed while a message handler was running)
+    * before the message-handling error path reaches peer_destroy via goto
+    * exit. In that case paddr->connected is already 0 and the peer has
+    * already been cleaned up -- just return.
+    */
+   if (peer->paddr->connected == 0) {
+      LOG(1, (LGPFX" %s: peer already disconnected; skipping destroy.\n",
+          peer->name));
+      return;
+   }
+
    LOG(1, (LGPFX" %s: destroying peer '%s' -- %s\n",
        peer->name, peer->hostname, peer->clientStr));
 
-   ASSERT(peer->paddr->connected == 1);
    peer->paddr->connected = 0;
    peer->connected = 0;
 
