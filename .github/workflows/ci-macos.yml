@@ -1,0 +1,27 @@
+name: CI (macOS)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: install packages
+      run: brew install pkg-config openssl leveldb snappy curl ncurses cjson
+    - name: build (debug)
+      run: make
+    - name: test (fuzz + gcs)
+      run: make check
+    - name: build (strict warnings)
+      run: make clean && make STRICT=1
+    - name: build (release)
+      run: make clean && make BUILD=release
+    - name: build (asan+ubsan)
+      run: make clean && make BUILD=asan+ubsan

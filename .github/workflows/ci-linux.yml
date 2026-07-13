@@ -1,4 +1,4 @@
-name: CI
+name: CI (Linux)
 
 on:
   push:
@@ -9,24 +9,15 @@ on:
 jobs:
   build:
 
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: install packages (ubuntu)
-      if: runner.os == 'Linux'
+    - name: install packages
       run: >
         sudo apt-get update && sudo apt-get install -y
         pkg-config libleveldb-dev libsnappy-dev libcurl4-openssl-dev
         libssl-dev libncurses-dev libcjson-dev
-    - name: install packages (macOS)
-      if: runner.os == 'macOS'
-      run: brew install pkg-config openssl leveldb snappy curl ncurses cjson
     - name: build (debug)
       run: make
     - name: test (fuzz + gcs)

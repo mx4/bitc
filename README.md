@@ -1,4 +1,5 @@
-[![CI](https://github.com/mx4/bitc/actions/workflows/ci.yml/badge.svg)](https://github.com/mx4/bitc/actions/workflows/ci.yml)
+[![CI (Linux)](https://github.com/mx4/bitc/actions/workflows/ci-linux.yml/badge.svg)](https://github.com/mx4/bitc/actions/workflows/ci-linux.yml)
+[![CI (macOS)](https://github.com/mx4/bitc/actions/workflows/ci-macos.yml/badge.svg)](https://github.com/mx4/bitc/actions/workflows/ci-macos.yml)
 
 ### BITC
 
