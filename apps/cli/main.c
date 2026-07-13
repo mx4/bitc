@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <signal.h>
+#include <time.h>
 #include <pthread.h>
 #include <curl/curl.h>
 #include <termios.h>
@@ -74,7 +75,9 @@ bool bitc_testing = 0;
 static void
 bitc_signal_int_default(void)
 {
-   signal(SIGINT, SIG_DFL);
+   struct sigaction sa = { .sa_handler = SIG_DFL };
+   sigemptyset(&sa.sa_mask);
+   sigaction(SIGINT, &sa, NULL);
 }
 
 
@@ -104,14 +107,22 @@ bitc_signal_handler(int sig)
 static void
 bitc_signal_install(void)
 {
-   signal(SIGINT, bitc_sigint_handler);
+   struct sigaction sa;
 
-   signal(SIGSEGV, bitc_signal_handler);
-   signal(SIGBUS,  bitc_signal_handler);
-   signal(SIGILL,  bitc_signal_handler);
+   sa = (struct sigaction){ .sa_handler = bitc_sigint_handler };
+   sigemptyset(&sa.sa_mask);
+   sigaction(SIGINT, &sa, NULL);
 
-   signal(SIGPIPE, SIG_IGN);
-   signal(SIGHUP,  SIG_IGN);
+   sa = (struct sigaction){ .sa_handler = bitc_signal_handler };
+   sigemptyset(&sa.sa_mask);
+   sigaction(SIGSEGV, &sa, NULL);
+   sigaction(SIGBUS,  &sa, NULL);
+   sigaction(SIGILL,  &sa, NULL);
+
+   sa = (struct sigaction){ .sa_handler = SIG_IGN };
+   sigemptyset(&sa.sa_mask);
+   sigaction(SIGPIPE, &sa, NULL);
+   sigaction(SIGHUP,  &sa, NULL);
 }
 
 
@@ -1143,10 +1154,10 @@ int main(int argc, char *argv[])
       case 'c': configPath = optarg;     break;
       case 'C': btc->connectHost = optarg; break;
       case 'S': btc->syncAndExit = 1;    break;
-      case 'x': btc->stopAfterHeight = atoi(optarg); break;
+      case 'x': btc->stopAfterHeight = (int)strtol(optarg, NULL, 10); break;
       case 'd': withui = 0;              break;
       case 'e': encrypt = 1;             break;
-      case 'n': maxPeers = atoi(optarg); break;
+      case 'n': maxPeers = (int)strtol(optarg, NULL, 10); break;
       case 'p': getpassword = 1;         break;
       case 't': testStr = optarg;        break;
       case 'T': btc->testnet = 1;        break;
@@ -1162,7 +1173,10 @@ int main(int argc, char *argv[])
 
    if (btc->testnet) {
       printf("Using testnet.\n");
-      usleep(500 * 1000);
+      {
+         struct timespec ts = { .tv_sec = 0, .tv_nsec = 500 * 1000 * 1000 };
+         nanosleep(&ts, NULL);
+      }
    }
 
    log_set_level(1);

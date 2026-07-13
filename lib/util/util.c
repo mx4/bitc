@@ -294,14 +294,14 @@ LogPrintf(bool warning,
    char tsPfx0[1024];
    char tsPfx[1024];
    char msg[4096];
-   struct timeval tv;
-   struct tm *tmp;
+   struct timespec tv;
+   struct tm tmp;
 
-   gettimeofday(&tv, NULL);
-   tmp = localtime(&tv.tv_sec);
+   clock_gettime(CLOCK_REALTIME, &tv);
+   localtime_r(&tv.tv_sec, &tmp);
 
-   strftime(tsPfx0, sizeof tsPfx0, "%T", tmp);
-   snprintf(tsPfx, sizeof tsPfx, "%s.%06llu", tsPfx0, (uint64)tv.tv_usec);
+   strftime(tsPfx0, sizeof tsPfx0, "%T", &tmp);
+   snprintf(tsPfx, sizeof tsPfx, "%s.%06llu", tsPfx0, (uint64)(tv.tv_nsec / 1000));
 
    vsnprintf(msg, sizeof msg, format, args);
 
@@ -535,7 +535,13 @@ log_init(const char *filename)
 
    ltime = time(NULL);
 
-   LogAlways(LGPFX" new log session: %s", asctime(localtime(&ltime)));
+   {
+      char tb[64];
+      struct tm tm_buf;
+      localtime_r(&ltime, &tm_buf);
+      strftime(tb, sizeof tb, "%c", &tm_buf);
+      LogAlways(LGPFX" new log session: %s\n", tb);
+   }
 }
 
 
@@ -565,15 +571,15 @@ log_set_level(int level)
 mtime_t
 time_get(void)
 {
-   struct timeval t;
+   struct timespec t;
    int s;
 
-   s = gettimeofday(&t, NULL);
+   s = clock_gettime(CLOCK_REALTIME, &t);
    if (s != 0) {
-      log_warn(LGPFX" Failed to gettimeofday(): %d\n", s);
+      log_warn(LGPFX" Failed to clock_gettime(): %d\n", s);
       return 0;
    }
-   return (mtime_t)t.tv_sec * 1000 * 1000 + t.tv_usec;
+   return (mtime_t)t.tv_sec * 1000 * 1000 + t.tv_nsec / 1000;
 }
 
 
@@ -884,15 +890,16 @@ char *
 print_time_utc(uint32 time)
 {
    char str[128];
-   struct tm *ts;
    time_t t = time;
 
    ASSERT_ON_COMPILE(sizeof t == sizeof(time_t));
 
    memset(str, 0, sizeof str);
-   ts = gmtime(&t);
-   if (ts) {
-      strftime(str, sizeof str, "%c", ts);
+   {
+      struct tm ts_buf;
+      if (gmtime_r(&t, &ts_buf) != NULL) {
+         strftime(str, sizeof str, "%c", &ts_buf);
+      }
    }
    return safe_strdup(str);
 }
@@ -937,15 +944,16 @@ print_time_local(uint32 time,
                  const char *fmt)
 {
    char str[128];
-   struct tm *ts;
    time_t t = time;
 
    ASSERT_ON_COMPILE(sizeof t == sizeof(time_t));
 
    memset(str, 0, sizeof str);
-   ts = localtime(&t);
-   if (ts) {
-      strftime(str, sizeof str, fmt, ts);
+   {
+      struct tm ts_local;
+      if (localtime_r(&t, &ts_local) != NULL) {
+         strftime(str, sizeof str, fmt, &ts_local);
+      }
    }
    return safe_strdup(str);
 }

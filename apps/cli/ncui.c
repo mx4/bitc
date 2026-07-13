@@ -460,13 +460,18 @@ ncui_signal_cb(int sig)
     * possible (and in fact very common) to receive a signal while we're in the
     * middle of processing one.
     */
-   signal(SIGWINCH, SIG_IGN);
+   struct sigaction sa = { .sa_handler = SIG_IGN };
+
+   sigemptyset(&sa.sa_mask);
+   sigaction(SIGWINCH, &sa, NULL);
 
    ncui_get_term_size(&y, &x);
    resizeterm(y, x);
    ncui_redraw();
 
-   signal(SIGWINCH, ncui_signal_cb);
+   sa = (struct sigaction){ .sa_handler = ncui_signal_cb };
+   sigemptyset(&sa.sa_mask);
+   sigaction(SIGWINCH, &sa, NULL);
 }
 
 
@@ -582,12 +587,12 @@ ncui_status_update(bool update)
 static void
 ncui_update_time_str(void)
 {
-   struct tm *tmp;
+   struct tm tm_buf;
    time_t t;
 
    t = time(NULL);
-   tmp = localtime(&t);
-   strftime(btc->ui->timeStr, sizeof btc->ui->timeStr, "%T", tmp);
+   localtime_r(&t, &tm_buf);
+   strftime(btc->ui->timeStr, sizeof btc->ui->timeStr, "%T", &tm_buf);
 }
 
 
@@ -1739,7 +1744,6 @@ ncui_blocklist_update(void)
    ASSERT(mutex_islocked(btcui->lock));
 
    while (btcui->blockConsIdx != btcui->blockProdIdx) {
-      char hashStr[80];
       uint256 *hash;
       uint32 timestamp;
       int height;
@@ -1752,7 +1756,6 @@ ncui_blocklist_update(void)
       height    =  btcui->blocks[btcui->blockConsIdx].height;
       timestamp =  btcui->blocks[btcui->blockConsIdx].timestamp;
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
       ts = print_time_local_short(timestamp);
       orphan = last != -1 && height != last + 1;
 
@@ -1766,7 +1769,7 @@ ncui_blocklist_update(void)
       mvwaddch(win,  0, 8, ACS_VLINE);
       mvwprintw(win, 0, 10, "%s", ts);
       mvwaddch(win,  0, 26, ACS_VLINE);
-      mvwprintw(win, 0, 28, "%s", hashStr);
+      mvwprintw(win, 0, 28, "%s", uint256_to_str(hash));
       free(ts);
       panel->num_lines = MIN(panel->max_lines, panel->num_lines + 1);
       last = height;
@@ -2121,12 +2124,10 @@ ncui_dashboard_latest_blocks(WINDOW *win,
       uint256 *hash    = &btcui->blocks[idx].hash;
       int height       =  btcui->blocks[idx].height;
       time_t timestamp =  btcui->blocks[idx].timestamp;
-      char hashStr[80];
       char *ts;
       bool orphan;
 
       ts = print_time_local(timestamp, "%T");
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
 
       orphan = last != -1 && height != last - 1 && (last - height) < 100;
       wattron(win, orphan ? PAIR_RED : PAIR_YELLOW);
@@ -2136,7 +2137,7 @@ ncui_dashboard_latest_blocks(WINDOW *win,
       mvwprintw(win, y, 10, "%s", ts);
       mvwaddch(win,  y, 19, ACS_VLINE);
       wattron(win, A_DIM);
-      mvwprintw(win, y, 21, "%s", hashStr);
+      mvwprintw(win, y, 21, "%s", uint256_to_str(hash));
       wattroff(win, A_DIM);
       y++;
       free(ts);
@@ -2390,12 +2391,9 @@ ncui_dashboard_header(WINDOW *win,
    mvwprintw(win, y, 1, "block:   ");
 
    if (btcui->numBlocks > 0) {
-      char hashStr[80];
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr,
-                               &btcui->blocks[btcui->blockProdIdx].hash);
       wattron(win,A_BOLD);
-      mvwprintw(win, y, 10, "%s", hashStr);
+      mvwprintw(win, y, 10, "%s", uint256_to_str(&btcui->blocks[btcui->blockProdIdx].hash));
       wattroff(win,A_BOLD);
    }
    y++;
@@ -2601,7 +2599,11 @@ ncui_init(void)
    ncui = safe_calloc(1, sizeof *ncui);
    btc->ui = ncui;
 
-   signal(SIGWINCH, ncui_signal_cb);
+   {
+      struct sigaction sa = { .sa_handler = ncui_signal_cb };
+      sigemptyset(&sa.sa_mask);
+      sigaction(SIGWINCH, &sa, NULL);
+   }
    ncui_ncurses_init();
    panic_register_cb(ncui_on_panic_cb, NULL);
    ncui_panel_init();

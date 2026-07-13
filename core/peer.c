@@ -573,7 +573,7 @@ peer_error_cb(struct netasync_socket *sock,
               void *clientData,
               int err)
 {
-   struct peer *peer = (struct peer *) clientData;
+   struct peer *peer = clientData;
 
    log_info(LGPFX" %s: Error. Closing conn. w/ %20s %s -- %s (%d).\n",
        peer->name, peer->hostname,
@@ -630,7 +630,7 @@ peer_handle_ping(struct peer *peer)
    uint64 nonce = 0;
    int res;
 
-   log_info(LGPFX" %s: %u PING from %s (%s)\n", __FUNCTION__, __LINE__,
+   log_info(LGPFX" %s: %u PING from %s (%s)\n", __func__, __LINE__,
        peer->name, peer->clientStr);
 
    res = btcmsg_parse_pingpong(peer->protversion, &peer->recvBuf,
@@ -939,7 +939,6 @@ peer_handle_inv(struct peer *peer)
    btc_msg_inv *inv = NULL;
    uint256 *hash;
    uint8 *type;
-   char hashStr[80];
    int numHash = 0;
    int numtx = 0;
    int numblk = 0;
@@ -963,8 +962,7 @@ peer_handle_inv(struct peer *peer)
          numblk++;
          s = blockstore_is_block_known(btc->blockStore, &inv[i].hash);
          if (s == 0) {
-            uint256_snprintf_reverse(hashStr, sizeof hashStr, &inv[i].hash);
-            log_info(LGPFX" %s: inv block %s\n", peer->name, hashStr);
+            log_info(LGPFX" %s: inv block %s\n", peer->name, uint256_to_str(&inv[i].hash));
             hash[numHash] = inv[i].hash;
             type[numHash++] = INV_TYPE_MSG_BLOCK;
          }
@@ -974,8 +972,7 @@ peer_handle_inv(struct peer *peer)
           * Retrieve all broadcast transactions that may be of interest to us.
           * We'll also get them once they find their way in a block.
           */
-         uint256_snprintf_reverse(hashStr, sizeof hashStr, &inv[i].hash);
-         log_info(LGPFX" %s: matching tx %s\n", peer->name, hashStr);
+         log_info(LGPFX" %s: matching tx %s\n", peer->name, uint256_to_str(&inv[i].hash));
          if (!wallet_has_tx(btc->wallet, &inv[i].hash)) {
             numtx++;
             hash[numHash] = inv[i].hash;
@@ -990,13 +987,22 @@ peer_handle_inv(struct peer *peer)
            peer->name, numtx, numblk, numfblk, numHash));
 
    if (bitc_state_ready()) {
-      for (i = 0; i < numHash; i++) {
-         uint256_snprintf_reverse(hashStr, sizeof hashStr, hash + i);
-         log_info(LGPFX" %s: [%d / %d] requesting %s %s\n",
-             peer->name, i, numHash,
-             type[i] == INV_TYPE_MSG_BLOCK ? "block" : "tx",
-             hashStr);
-         res = peer_send_getdata(peer, type[i], hash + i, 1);
+      i = 0;
+      while (i < numHash) {
+         int runLen = 1;
+
+         while (i + runLen < numHash && type[i + runLen] == type[i]) {
+            runLen++;
+         }
+log_info(LGPFX" %s: [%d / %d] requesting %s %s (batch of %d)\n",
+      peer->name, i, numHash,
+      type[i] == INV_TYPE_MSG_BLOCK ? "block" : "tx",
+      uint256_to_str(hash + i), runLen);
+         res = peer_send_getdata(peer, type[i], hash + i, runLen);
+         if (res) {
+            break;
+         }
+         i += runLen;
       }
    }
 
@@ -1250,7 +1256,7 @@ peer_receive_cb(struct netasync_socket *sock,
                 size_t bufLen,
                 void *clientData)
 {
-   struct peer *peer = (struct peer *) clientData;
+   struct peer *peer = clientData;
    enum btc_msg_type msg;
    int res = 0;
 
@@ -1398,7 +1404,7 @@ peer_connect_cb(struct netasync_socket *sock,
                 void *clientData,
                 int err)
 {
-   struct peer *peer = (struct peer *)clientData;
+   struct peer *peer = clientData;
 
    ASSERT(peer);
    ASSERT(peer->magic == PEER_MAGIC);
@@ -1655,11 +1661,9 @@ peer_tx_broadcast(struct peer *peer,
                   const uint256 *hash)
 {
    struct buff *bufInv;
-   char hashStr[80];
    int res;
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
-   log_info(LGPFX" %s: broadcasting tx %s\n", peer->name, hashStr);
+   log_info(LGPFX" %s: broadcasting tx %s\n", peer->name, uint256_to_str(hash));
    res = btcmsg_craft_inv(&bufInv, INV_TYPE_MSG_TX, hash, 1);
    ASSERT(res == 0);
 

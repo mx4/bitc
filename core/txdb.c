@@ -154,13 +154,11 @@ txdb_print_coins(const struct txdb *txdb,
 
    for (i = 0; i < n; i++) {
       struct txo_entry *txo_ent = txo_array + i;
-      char hashStr[80];
 
       if (onlyUnspent && txo_ent->spent) {
          continue;
       }
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, &txo_ent->txHash);
       log_info(LGPFX" txo%03d: %s sp=%u id=%3u v=%llu\n",
           i, txo_ent->btc_addr, txo_ent->spent, txo_ent->outIdx, txo_ent->value);
    }
@@ -557,15 +555,13 @@ txdb_process_tx_entry(struct txdb      *txdb,
                       bool             *relevant)
 {
    struct txo_entry *txo_entry;
-   char hashStr[80];
    uint32 i;
    bool s;
 
    ASSERT(txdb);
    ASSERT(*relevant == 0);
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, txHash);
-   log_info(LGPFX" processing  %s\n", hashStr);
+   log_info(LGPFX" processing  %s\n", uint256_to_str(txHash));
 
    /*
     * Look at all the tx referred to by the inputs. If any of these match
@@ -690,7 +686,6 @@ txdb_remove_from_hashtable(struct txdb      *txdb,
                            const uint256    *txHash)
 {
    struct tx_entry *txe;
-   char hashStr[80];
    bool s;
 
    txe = txdb_get_tx_entry(txdb, txHash);
@@ -699,13 +694,11 @@ txdb_remove_from_hashtable(struct txdb      *txdb,
       return;
    }
 
-   txdb_free_tx_entry(txe);
-
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, txHash);
+txdb_free_tx_entry(txe);
 
    s = hashtable_remove(txdb->hash_tx, txHash, sizeof *txHash);
    log_warn(LGPFX" %s removed from hash_tx: %d (count=%u)\n",
-           hashStr, s, hashtable_getnumentries(txdb->hash_tx));
+            uint256_to_str(txHash), s, hashtable_getnumentries(txdb->hash_tx));
 }
 
 
@@ -807,7 +800,6 @@ txdb_load_tx(struct txdb *txdb,
 {
    struct tx_ser_data *txd;
    struct tx_ser_key *txk;
-   char hashStr[80];
    bool relevant = 0;
    uint256 txHash;
    bool confirmed;
@@ -825,8 +817,7 @@ txdb_load_tx(struct txdb *txdb,
 
    hash256_calc(txd->buf, txd->len, &txHash);
    ASSERT(uint256_issame(&txHash, &txk->txHash));
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, &txHash);
-   LOG(1, (LGPFX" loading %ctx %s\n", confirmed ? 'c' : 'u', hashStr));
+   LOG(1, (LGPFX" loading %ctx %s\n", confirmed ? 'c' : 'u', uint256_to_str(&txHash)));
 
    res = txdb_remember_tx(txdb, 1 /* not on disk, just hashtable */,
                           txd->timestamp, txd->buf, txd->len,
@@ -845,19 +836,18 @@ txdb_load_tx(struct txdb *txdb,
          int hours = numSec / (60 * 60);
          int min  = (numSec % (60 * 60)) / 60;
 
-         log_info(LGPFX" unconfirmed tx %s was sent %d hours %d min ago.\n",
-             hashStr, hours, min);
+log_info(LGPFX" unconfirmed tx %s was sent %d hours %d min ago.\n",
+              uint256_to_str(&txHash), hours, min);
       }
 
       buff_init(&buf, txd->buf, txd->len);
 
-      log_info(LGPFX" adding tx %s to relay-set\n", hashStr);
+      log_info(LGPFX" adding tx %s to relay-set\n", uint256_to_str(&txHash));
       peergroup_new_tx_broadcast(btc->peerGroup, &buf,
                                  txd->timestamp + 2 * 60 * 60,
                                  &txHash);
    } else {
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, &txd->blkHash);
-      log_info(LGPFX" tx in block %s\n", hashStr);
+      log_info(LGPFX" tx in block %s\n", uint256_to_str(&txd->blkHash));
    }
 
    free(txd->buf);
@@ -967,7 +957,6 @@ txdb_save_tx(struct txdb   *txdb,
    struct tx_ser_data txdata;
    struct buff *bufd;
    struct buff *bufk;
-   char hashStr[80];
    char *err;
 
    err = NULL;
@@ -981,8 +970,7 @@ txdb_save_tx(struct txdb   *txdb,
    txdata.len       = len;
    txdata.timestamp = timestamp;
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, txHash);
-   bufk = txdb_serialize_tx_key(txdb->tx_seq, hashStr);
+   bufk = txdb_serialize_tx_key(txdb->tx_seq, uint256_to_str(txHash));
    bufd = txdb_serialize_tx_data(&txdata);
 
    leveldb_put(txdb->db, txdb->wr_opts,
@@ -994,7 +982,7 @@ txdb_save_tx(struct txdb   *txdb,
    buff_free(bufd);
 
    if (err) {
-      log_warn(LGPFX" failed to save tx %s: %s\n", hashStr, err);
+      log_warn(LGPFX" failed to save tx %s: %s\n", uint256_to_str(txHash), err);
       free(err);
    }
 
@@ -1124,7 +1112,6 @@ txdb_remember_tx(struct txdb   *txdb,
                  bool          *relevant)
 {
    struct tx_entry *txe;
-   char hashStr[80];
    int res;
 
    ASSERT(txHash);
@@ -1142,11 +1129,10 @@ txdb_remember_tx(struct txdb   *txdb,
       return res;
    }
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, txHash);
    txdb_process_tx_entry(txdb, txHash, blkHash, &txe->tx, &txe->relevant);
    if (txe->relevant == 0) {
       log_warn(LGPFX" tx %s not relevant (%u)\n",
-              hashStr, hashtable_getnumentries(txdb->hash_tx));
+              uint256_to_str(txHash), hashtable_getnumentries(txdb->hash_tx));
       return 0;
    }
 
@@ -1158,7 +1144,7 @@ txdb_remember_tx(struct txdb   *txdb,
     * OK -- this transaction is relevant to our wallet.
     */
    *relevant = 1;
-   log_warn(LGPFX" tx %s ok (%u)\n", hashStr, hashtable_getnumentries(txdb->hash_tx));
+   log_warn(LGPFX" tx %s ok (%u)\n", uint256_to_str(txHash), hashtable_getnumentries(txdb->hash_tx));
 
    res = txdb_save_tx(txdb, blkHash, txHash, ts, buf, len);
    if (res == 0) {
@@ -1409,7 +1395,6 @@ txdb_select_coins(struct txdb              *txdb,
 
    while (value < (desc->total_value + desc->fee) && i < txo_num) {
       struct txo_entry *txo_ent = &txo_array[i++];
-      char hashStr[80];
 
       if (txo_ent->spent == 1 ||
           txo_ent->spendable == 0) {
@@ -1420,9 +1405,8 @@ txdb_select_coins(struct txdb              *txdb,
          continue;
       }
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, &txo_ent->txHash);
       log_info(LGPFX" using txo for %s id=%3u of %s\n",
-          txo_ent->btc_addr, txo_ent->outIdx, hashStr);
+          txo_ent->btc_addr, txo_ent->outIdx, uint256_to_str(&txo_ent->txHash));
       value += txo_ent->value;
       memcpy(&tx->tx_in[tx->in_count].prevTxHash, &txo_ent->txHash, sizeof txo_ent->txHash);
       tx->tx_in[tx->in_count].prevTxOutIdx = txo_ent->outIdx;
@@ -1451,7 +1435,6 @@ txdb_craft_tx(struct txdb              *txdb,
               btc_msg_tx               *tx)
 {
    struct buff *buf;
-   char hashStr[80];
    uint256 txHash;
    uint64 change;
    uint32 numCoins;
@@ -1503,8 +1486,7 @@ txdb_craft_tx(struct txdb              *txdb,
 
    hash256_calc(buff_base(buf), buff_curlen(buf), &txHash);
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, &txHash);
-   log_warn(LGPFX" %s (%zu bytes)\n", hashStr, buff_curlen(buf));
+   log_warn(LGPFX" %s (%zu bytes)\n", uint256_to_str(&txHash), buff_curlen(buf));
    log_bytes(LGPFX" TX: ", buff_base(buf), buff_curlen(buf));
 
    if (bitc_testing) {
@@ -1518,7 +1500,7 @@ txdb_craft_tx(struct txdb              *txdb,
                           buff_base(buf), buff_curlen(buf),
                           &txHash, NULL, &relevant);
 
-   txdb_save_tx_label(tx_desc, hashStr);
+   txdb_save_tx_label(tx_desc, uint256_to_str(&txHash));
    txdb_export_tx_info(txdb);
 
    res = peergroup_new_tx_broadcast(btc->peerGroup, buf,

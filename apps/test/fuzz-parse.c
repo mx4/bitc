@@ -120,9 +120,15 @@ main(int argc, char **argv)
 
    log_init("/tmp/fuzzharness.log");
    btc = calloc(1, sizeof *btc);
-   signal(SIGSEGV, crash_handler);
-   signal(SIGBUS,  crash_handler);
-   signal(SIGABRT, crash_handler);
+   {
+      struct sigaction sa;
+
+      sa = (struct sigaction){ .sa_handler = crash_handler };
+      sigemptyset(&sa.sa_mask);
+      sigaction(SIGSEGV, &sa, NULL);
+      sigaction(SIGBUS,  &sa, NULL);
+      sigaction(SIGABRT, &sa, NULL);
+   }
 
    /* replay a single input: ./fuzz-parse --hex deadbeef... */
    if (argc > 2 && strcmp(argv[1], "--hex") == 0) {
@@ -141,7 +147,7 @@ main(int argc, char **argv)
       return 0;
    }
 
-   iters = argc > 1 ? atol(argv[1]) : 300000;
+   iters = argc > 1 ? strtol(argv[1], NULL, 10) : 300000;
    for (i = 0; i < iters; i++) {
       size_t len = gen(base + (uint32)i * 2654435761u, g_bytes);
       g_iter = i;

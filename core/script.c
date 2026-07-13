@@ -113,13 +113,14 @@ script_sign_hash(struct wallet         *wallet,
    s = key_verify(k, hash, sizeof *hash, sig, siglen);
    ASSERT(s == 1);
 
-   uint8 push_data[siglen + 1];
+   uint8 *push_data = safe_malloc(siglen + 1);
 
    memcpy(push_data, sig, siglen);
    free(sig);
    push_data[siglen] = (uint8)hashType;
 
    script_push_data(script, push_data, siglen + 1);
+   free(push_data);
 
    return 0;
 }

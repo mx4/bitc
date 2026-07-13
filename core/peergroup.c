@@ -156,16 +156,14 @@ peergroup_stop_broadcast_tx(struct peergroup *pg,
                             const uint256 *hash)
 {
    struct tx_broadcast *txb = NULL;
-   char hashStr[80];
    bool s;
 
 s = hashtable_lookup(pg->hash_broadcast, hash, sizeof *hash, (void **)&txb);
-    if (s == 0) {
-       return;
+   if (s == 0) {
+      return;
    }
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
-   log_warn(LGPFX" stop relaying tx %s\n", hashStr);
+   log_warn(LGPFX" stop relaying tx %s\n", uint256_to_str(hash));
 
    ASSERT(txb);
 
@@ -1107,11 +1105,9 @@ peergroup_check_pending_blocks(void)
     * not pg->cfPending directly.
     */
    for (i = 0; i < numExpired; i++) {
-      char hashStr[80];
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, &expiredHash[i]);
       log_warn(LGPFX" BIP157: getdata(MSG_BLOCK) for %s timed out; "
-              "retrying against another peer.\n", hashStr);
+              "retrying against another peer.\n", uint256_to_str(&expiredHash[i]));
 
       peergroup_remove_pending_block(&expiredHash[i]);
       peergroup_retry_block_fetch(expiredFrom[i], &expiredHash[i], 1);
@@ -1287,7 +1283,6 @@ peergroup_download_filtered_blocks(struct peer *peer)
    blockstore_get_highest(bs, &walletHash, &lastHashStore, &startHash);
 
    if (first) {
-      char hashStr[80];
       int startHeight;
       int tipHeight;
 
@@ -1295,8 +1290,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
 
       pg->numToFetch = blockstore_get_height(bs)
          - blockstore_get_block_height(bs, &startHash);
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, &startHash);
-      log_info(LGPFX" downloading starting at %s\n", hashStr);
+      log_info(LGPFX" downloading starting at %s\n", uint256_to_str(&startHash));
 
       /*
        * BIP157: initialize the parallel cfilter scan. The range
@@ -1986,19 +1980,17 @@ peergroup_retry_block_fetch(struct peer *failedPeer,
    }
 
    for (i = 0; i < numHashes; i++) {
-      char hashStr[80];
       int res;
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, &hashes[i]);
       log_info(LGPFX" BIP157: retrying block %s via %s.\n",
-          hashStr, peer_name(best));
+          uint256_to_str(&hashes[i]), peer_name(best));
 
       res = peer_send_getdata(best, INV_TYPE_MSG_BLOCK, &hashes[i], 1);
       if (res == 0) {
          peergroup_add_pending_block(&hashes[i], best);
       } else {
          log_warn(LGPFX" BIP157: retry getdata failed for %s: %d.\n",
-                 hashStr, res);
+                 uint256_to_str(&hashes[i]), res);
       }
    }
 }
@@ -2527,7 +2519,7 @@ peergroup_seed(void)
 
          if (colon) {
             *colon = '\0';
-            hostport = atoi(colon + 1);
+            hostport = (int)strtol(colon + 1, NULL, 10);
          }
          if (tok[0] != '\0') {
             peergroup_add_peer_from_str(btc->poll, tok, hostport);
@@ -2580,14 +2572,12 @@ static void
 peergroup_save_lastblk(struct config *config,
                        const uint256 *hash)
 {
-   char hashStr[80];
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
    if (!uint256_iszero(hash)) {
-      log_info(LGPFX" saving lastBlk: %s\n", hashStr);
+      log_info(LGPFX" saving lastBlk: %s\n", uint256_to_str(hash));
    }
 
-   config_setstring(config, hashStr, "peergroup.lastblk");
+   config_setstring(config, uint256_to_str(hash), "peergroup.lastblk");
    config_save(config);
 }
 
@@ -2757,21 +2747,19 @@ peergroup_handle_headers(struct peer            *peer,
       return 0;
    }
 
-   for (i = 0; i < n; i++) {
-      const btc_block_header *hdr = headers + i;
-      char hashStr[80];
-      uint256 hash;
-      bool orphan;
-      bool s;
+for (i = 0; i < n; i++) {
+   const btc_block_header *hdr = headers + i;
+   uint256 hash;
+   bool orphan;
+   bool s;
 
-      hash256_calc(hdr, sizeof *hdr, &hash);
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, &hash);
+   hash256_calc(hdr, sizeof *hdr, &hash);
 
-      s = blockstore_add_header(bs, hdr, &hash, &orphan);
-      if (orphan) {
-         numOrphans++;
-         bitcui_set_status("Block %s orphaned (count = %d)", hashStr, numOrphans);
-      }
+   s = blockstore_add_header(bs, hdr, &hash, &orphan);
+   if (orphan) {
+      numOrphans++;
+      bitcui_set_status("Block %s orphaned (count = %d)", uint256_to_str(&hash), numOrphans);
+   }
       if (s) {
          numAdded++;
          btc->peerGroup->numHdrFetched++;

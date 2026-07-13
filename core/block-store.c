@@ -214,11 +214,9 @@ blockstore_get_block_height(struct blockstore *bs,
    mutex_lock(bs->lock);
 
 s = hashtable_lookup(bs->hash_blk, hash, sizeof *hash, (void **)&be);
-    if (s == 0) {
-       char hashStr[80];
+if (s == 0) {
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
-      Panic(LGPFX" block %s not found.\n", hashStr);
+      Panic(LGPFX" block %s not found.\n", uint256_to_str(hash));
    }
 
    height = be->height;
@@ -321,7 +319,6 @@ blockstore_set_chain_links(struct blockstore *bs,
                            struct blockentry *be)
 {
    struct blockentry *prev;
-   char hashStr[80];
    uint256 hash;
    int height;
    bool s;
@@ -329,7 +326,6 @@ blockstore_set_chain_links(struct blockstore *bs,
    mutex_lock(bs->lock);
 
    hash256_calc(&be->header, sizeof be->header, &hash);
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, &hash);
 
    if (be->height >= 0) {
       struct blockentry *li;
@@ -338,13 +334,12 @@ blockstore_set_chain_links(struct blockstore *bs,
        * entries from now on need to be made orphans.
        */
 
-      log_info(LGPFX" Reached block %s\n", hashStr);
+      log_info(LGPFX" Reached block %s\n", uint256_to_str(&hash));
 
       li = be->next;
       while (li) {
          hash256_calc(&li->header, sizeof li->header, &hash);
-         uint256_snprintf_reverse(hashStr, sizeof hashStr, &hash);
-         log_info(LGPFX" moving #%d %s from blk -> orphan\n", li->height, hashStr);
+         log_info(LGPFX" moving #%d %s from blk -> orphan\n", li->height, uint256_to_str(&hash));
          s = hashtable_remove(bs->hash_blk, &hash, sizeof hash);
          ASSERT(s);
          li->height = -1;
@@ -363,7 +358,7 @@ blockstore_set_chain_links(struct blockstore *bs,
 
    be->height = 1 + blockstore_set_chain_links(bs, prev);
 
-   log_info(LGPFX" moving #%d %s from orphan -> blk\n", be->height, hashStr);
+   log_info(LGPFX" moving #%d %s from orphan -> blk\n", be->height, uint256_to_str(&hash));
 
    prev->next = be;
    be->prev = prev;
@@ -507,15 +502,13 @@ blockstore_add_entry(struct blockstore *bs,
 
       memcpy(&bs->best_hash, hash, sizeof *hash);
    } else {
-      char hashStr[80];
       uint32 count;
 
       be->height = -1;
       count = hashtable_getnumentries(bs->hash_orphans);
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
       log_info(LGPFX" block %s orphaned. %u orphan%s total.\n",
-          hashStr, count, count > 1 ? "s" : "");
+          uint256_to_str(hash), count, count > 1 ? "s" : "");
 
       s = hashtable_insert(bs->hash_orphans, hash, sizeof *hash, be);
       ASSERT(s);
@@ -823,11 +816,9 @@ blockset_open_file(struct blockstore *blockStore,
 
    ts = time_get() - ts;
 
-   char hashStr[80];
    char *latStr;
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, &blockStore->best_hash);
-   log_info(LGPFX" loaded blocks up to %s\n", hashStr);
+   log_info(LGPFX" loaded blocks up to %s\n", uint256_to_str(&blockStore->best_hash));
    latStr = print_latency(ts);
    log_info(LGPFX" this took %s\n", latStr);
    free(latStr);
@@ -1041,15 +1032,12 @@ blockstore_get_hash_from_birth(const struct blockstore *bs,
    
    for (e = bs->best_chain; e != bs->genesis; e = e->prev)  {
       if (e->header.timestamp < birth) {
-         char hashStr[80];
          char *s;
          uint64 ts = birth;
 
          hash256_calc(&e->header, sizeof e->header, hash);
-
-         uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
          s = print_time_local(birth, "%c");
-         log_info(LGPFX" birth %llu (%s) --> block %s.\n", ts, s, hashStr);
+         log_info(LGPFX" birth %llu (%s) --> block %s.\n", ts, s, uint256_to_str(hash));
          free(s);
          return;
       }
@@ -1253,10 +1241,8 @@ blockstore_get_block_timestamp(const struct blockstore *bs,
 
    be = blockstore_lookup(bs, hash);
    if (be == NULL) {
-      char hashStr[80];
 
-      uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
-      Panic(LGPFX" block %s not found.\n", hashStr);
+      Panic(LGPFX" block %s not found.\n", uint256_to_str(hash));
    }
 
    ts = be->header.timestamp;

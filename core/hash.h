@@ -131,8 +131,8 @@ bool uint256_from_str(const char *str, uint256 *hash);
 static inline const char *
 uint256_to_str(const uint256 *h)
 {
-   static char buf[4][80];
-   static int idx;
+   static _Thread_local char buf[4][80];
+   static _Thread_local int idx;
    char *b = buf[idx++ & 3];
    uint256_snprintf_reverse(b, 80, h);
    return b;

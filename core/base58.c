@@ -235,8 +235,8 @@ base58_encode(const void *buf,
               size_t len)
 {
    const uint8 *buf0 = (uint8 *)buf;
-   char str[len * 138 / 100 + 1];
-   char rev[len + 1];
+   char *str = safe_malloc(len * 138 / 100 + 1);
+   char *rev = safe_malloc(len + 1);
    char *s = NULL;
    size_t strLen = 0;
    BN_CTX *ctx;
@@ -260,7 +260,7 @@ base58_encode(const void *buf,
 
    str_copyreverse(rev, buf0, len);
    rev[len] = 0;
-   base58_setvch(bn, rev, sizeof rev);
+   base58_setvch(bn, rev, len + 1);
    s = NULL;
    ASSERT(!BN_is_zero(bn));
 
@@ -288,6 +288,8 @@ base58_encode(const void *buf,
    str_copyreverse(s, str, strLen);
 
 err:
+   free(str);
+   free(rev);
    BN_free(bn58);
    BN_free(bn0);
    BN_free(bn);
