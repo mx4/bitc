@@ -85,7 +85,7 @@ else
 CFLAGS += -O1 -g
 endif
 
-CFLAGS += -Icore/ -Iapps/cli/ -Ilib/config/ -Ilib/file/ -Ilib/fx/ -Ilib/hashtable/ -Ilib/ip_info/ -Ilib/netasync/ -Ilib/poll/ -Ilib/poolworker/ -Ilib/util/ -Iext/src/MurmurHash3/
+CFLAGS += -Icore/ -Iapps/cli/ $(addprefix -I,$(wildcard lib/*/)) -Iext/src/MurmurHash3/
 CFLAGS += $(DEP_CFLAGS)
 
 # leveldb/snappy live under the Homebrew prefix on macOS and ship no .pc file.
@@ -110,62 +110,16 @@ CFLAGS += -pg
 LDOPTS += -pg
 endif
 
-###
-### the rest
-###
-
-LIBS = $(DEP_LIBS)
-
-ifeq ($(OS), Darwin)
-LDOPTS += -L$(BREW)/lib
-endif
-
 BLDDIR = bld
+.DELETE_ON_ERROR:
 BTC_BIN  = bitc
-ALLTARGETS = bitc
-
 ifndef V
   QUIET_CC   = @echo ' CC   ' $<;
   QUIET_LINK = @echo ' LINK ' $@;
   QUIET_TEST = >/dev/null 2>&1
 endif
 
-BTC_FILES  = core/btc-message.c
-BTC_FILES += core/script.c
-BTC_FILES += core/peer.c
-BTC_FILES += core/peergroup.c
-BTC_FILES += core/addrbook.c
-BTC_FILES += core/block-store.c
-BTC_FILES += core/base58.c
-BTC_FILES += core/key.c
-BTC_FILES += core/txdb.c
-BTC_FILES += core/wallet.c
-BTC_FILES += core/serialize.c
-BTC_FILES += core/crypt.c
-BTC_FILES += core/rpc.c
-BTC_FILES += core/hash.c
-BTC_FILES += core/gcs.c
-BTC_FILES += core/cfheader-store.c
-BTC_FILES += core/peerstats.c
-BTC_FILES += core/ripemd160.c
-
-BTC_FILES += lib/hashtable/hashtable.c
-BTC_FILES += lib/fx/fx.c
-BTC_FILES += lib/util/util.c
-BTC_FILES += lib/file/file.c
-BTC_FILES += lib/poolworker/poolworker.c
-BTC_FILES += lib/config/config.c
-BTC_FILES += lib/poll/poll.c
-BTC_FILES += lib/netasync/netasync.c
-BTC_FILES += lib/ip_info/ip_info.c
-
-BTC_FILES += ext/src/MurmurHash3/MurmurHash3.c
-
-BTC_FILES += apps/cli/main.c
-BTC_FILES += apps/cli/ncui.c
-BTC_FILES += apps/cli/bitc_ui.c
-BTC_FILES += apps/cli/test.c
-
+BTC_FILES := $(wildcard core/*.c lib/*/*.c ext/src/MurmurHash3/*.c apps/cli/*.c)
 BTC_FILES := $(sort $(BTC_FILES))
 BTC_OBJ   := $(patsubst %.c,$(BLDDIR)/%.o,$(BTC_FILES))
 BTC_DEPS  := $(patsubst %.c,$(BLDDIR)/%.d,$(BTC_FILES))
@@ -175,7 +129,7 @@ $(BLDDIR)/%.o: %.c
 	$(QUIET_CC)$(CC) $(CFLAGS) -c $< -o $@
 
 bitc: $(BTC_OBJ)
-	$(QUIET_LINK)$(CC) $(LDOPTS) -o $(BTC_BIN) $(BTC_OBJ) $(LIBS)
+	$(QUIET_LINK)$(CC) $(LDOPTS) -o $(BTC_BIN) $(BTC_OBJ) $(DEP_LIBS)
 
 # do not move the following line:
 -include $(BTC_DEPS)
@@ -187,7 +141,7 @@ test: bitc
 ###  Common
 ###
 
-all: $(ALLTARGETS)
+all: bitc
 
 ###
 ### Adversarial parser fuzzer: feeds random/truncated bytes to every
@@ -200,14 +154,14 @@ FUZZ_OBJ += $(BLDDIR)/core/hash.o $(BLDDIR)/core/ripemd160.o $(BLDDIR)/core/base
 FUZZ_OBJ += $(BLDDIR)/lib/util/util.o $(BLDDIR)/lib/file/file.o
 
 fuzz-parse: apps/test/fuzz-parse.c $(FUZZ_OBJ)
-	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(LIBS)
+	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(DEP_LIBS)
 
 ### GCS / SipHash self-test (BIP158 decoder).
 TEST_GCS_OBJ  = $(BLDDIR)/core/gcs.o $(BLDDIR)/core/hash.o $(BLDDIR)/core/ripemd160.o
 TEST_GCS_OBJ += $(BLDDIR)/lib/util/util.o $(BLDDIR)/lib/file/file.o
 
 test-gcs: apps/test/test-gcs.c $(TEST_GCS_OBJ)
-	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(LIBS)
+	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDOPTS) -o $@ $^ $(DEP_LIBS)
 
 # Regression gate: build and run the parser fuzzer and GCS tests.
 # Override for a deeper run, e.g. `make check FUZZ_ITERS=1000000`.
@@ -233,7 +187,7 @@ lines:
 	 find . -name '*.[ch]'|xargs cat|wc -l
 
 clean:
-	rm -f $(ALLTARGETS) fuzz-parse fuzz-parse.d test-gcs test-gcs.d compile_commands.json *~ gmon*
+	rm -f bitc fuzz-parse fuzz-parse.d test-gcs test-gcs.d compile_commands.json *~ gmon*
 	rm -rf fuzz-parse.dSYM test-gcs.dSYM $(BLDDIR)
 
 tags:
