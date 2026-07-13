@@ -22,6 +22,7 @@
 #include "serialize.h"
 #include "gcs.h"
 #include "cfheader-store.h"
+#include "peerstats.h"
 
 #define LGPFX   "PEERG:"
 
@@ -581,6 +582,8 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
          seg->done = 1;
          log_info(LGPFX" BIP157: cfilter chunk [%d..%d] complete.\n",
              seg->startHeight, seg->endHeight);
+         peerstats_record_cfilter_ok(pg->peerStats, peer_get_ip(peer),
+                                     (uint32)(seg->progressTS - seg->assignedTS));
          while (pg->cfDoneContig < pg->cfSegCount &&
                 pg->cfSeg[pg->cfDoneContig].done) {
             pg->cfDoneContig++;
@@ -952,6 +955,14 @@ peergroup_check_pending_chunks(void)
       }
       log_warn(LGPFX" BIP157: cfilter chunk [%d..%d] stalled on %s; requeuing.\n",
               seg->startHeight, seg->endHeight, peer_name(seg->assignedPeer));
+      /*
+       * Unlike a disconnect (peergroup_requeue_peer_chunks), which can happen
+       * for reasons that say nothing about the peer's quality (we hit
+       * -n and evicted it, we're exiting, ...), a peer going quiet for
+       * SYNC_STALL_USEC while it holds a chunk is a genuine peer-caused
+       * signal: it accepted the request and then stopped answering.
+       */
+      peerstats_record_cfilter_fail(pg->peerStats, peer_get_ip(seg->assignedPeer));
       /*
        * Remember who just failed this chunk so the scheduler below (and any
        * later assign_next_chunk_to call) doesn't immediately hand it right
@@ -2128,6 +2139,36 @@ peergroup_refill(bool init)
       max = MAX(max, pg->minActiveInit);
    }
 
+   /*
+    * Before falling back to picking uniformly at random from the ~10k-entry,
+    * largely-unverified address book, try our short list of addresses
+    * proven -- across this run and past ones -- to actually serve compact
+    * filters correctly with no recorded failure (see core/peerstats.c).
+    * This is what makes a repeat run reliably find the same handful of good
+    * filter peers instead of re-rolling the dice on a mostly-non-BIP157
+    * network every time.
+    */
+   if (pg->peerStats != NULL) {
+      struct peerstats_entry best[32];
+      int nBest;
+      int i;
+
+      nBest = peerstats_get_best(pg->peerStats, (int)ARRAYSIZE(best), best);
+      for (i = 0; i < nBest && pg->active < max; i++) {
+         struct peer_addr *paddr = addrbook_get_by_ip(btc->book, best[i].ip);
+
+         if (paddr == NULL || paddr->triedalready || paddr->connected) {
+            continue;
+         }
+         log_info(LGPFX" preferring known-good peer %d.%d.%d.%d "
+             "(cfilterOk=%u, cfilterFail=%u, latency=%u us).\n",
+             paddr->addr.ip[12], paddr->addr.ip[13],
+             paddr->addr.ip[14], paddr->addr.ip[15],
+             best[i].cfilterOk, best[i].cfilterFail, best[i].latencyUsec);
+         peergroup_add_peer(paddr);
+      }
+   }
+
    while (numTried < 2000 && pg->active < max) {
       struct peer_addr *paddr;
 
@@ -2283,6 +2324,7 @@ peergroup_periodic_cb(void *clientData)
       peergroup_save_lastblk(btc->config, &pg->lastBlk);
       pg->configNeedWrite = 0;
    }
+   peerstats_flush(pg->peerStats);
 }
 
 
@@ -2353,17 +2395,25 @@ peergroup_init(struct config *config,
    pg->cfhdrSyncStarted  = 0;
 
    /*
-    * Open the compact-filter header store.
+    * Open the compact-filter header store and the peer quality store.
     */
    {
       char *dir = bitc_get_directory();
       char cfhdrPath[PATH_MAX];
+      char pstatPath[PATH_MAX];
 
       snprintf(cfhdrPath, sizeof cfhdrPath, "%s/cfheaders.dat", dir);
       res = cfheaderstore_init(cfhdrPath, &pg->cfStore);
       if (res) {
          log_warn(LGPFX" failed to open cfheader store '%s'.\n", cfhdrPath);
          pg->cfStore = NULL;
+      }
+
+      snprintf(pstatPath, sizeof pstatPath, "%s/peerstats.dat", dir);
+      res = peerstats_init(pstatPath, &pg->peerStats);
+      if (res) {
+         log_warn(LGPFX" failed to open peer stats '%s'.\n", pstatPath);
+         pg->peerStats = NULL;
       }
       free(dir);
    }
@@ -2620,6 +2670,8 @@ peergroup_exit(struct peergroup *pg)
    hashtable_destroy(pg->hash_broadcast);
    cfheaderstore_exit(pg->cfStore);
    pg->cfStore = NULL;
+   peerstats_exit(pg->peerStats);
+   pg->peerStats = NULL;
    free(pg->cfcheckptExpected);
    pg->cfcheckptExpected = NULL;
    free(pg->cfPending);

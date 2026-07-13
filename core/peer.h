@@ -15,6 +15,7 @@ int  peer_check_liveness(struct circlist_item *li, mtime_t now);
 void peer_destroy(struct circlist_item *li, int err);
 int  peer_getinfo(struct circlist_item *item, struct bitcui_peer *pinfo);
 uint64 peer_get_services(struct circlist_item *li);
+const uint8 *peer_get_ip(const struct peer *peer);
 bool peer_is_connected(struct circlist_item *li);
 struct peer *peer_from_li(struct circlist_item *li);
 struct circlist_item *peer_get_item(struct peer *peer);

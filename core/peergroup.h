@@ -87,6 +87,16 @@ struct peergroup {
     */
    struct cfheaderstore *cfStore;
 
+   /*
+    * Per-peer-address quality history (handshake latency, real observed
+    * services, proven cfilter success/failure counts), persisted across
+    * runs and keyed by IP -- see core/peerstats.c. Used to prefer known-good
+    * peers (especially proven compact-filter servers) when refilling the
+    * active peer set, instead of picking uniformly at random from the
+    * ~10k-entry, largely-unverified address book.
+    */
+   struct peerstats     *peerStats;
+
    int                   cfScanFloor;      /* first height of the cfilter scan (fixed) */
    int                   cfTipHeight;      /* last height of the cfilter scan (fixed) */
    int                   cfVerified;       /* number of cfilters verified so far (progress) */

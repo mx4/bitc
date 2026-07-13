@@ -146,6 +146,26 @@ addrbook_get_rand_addr(const struct addrbook *book)
 /*
  *------------------------------------------------------------------------
  *
+ * addrbook_get_by_ip --
+ *
+ *------------------------------------------------------------------------
+ */
+
+struct peer_addr *
+addrbook_get_by_ip(const struct addrbook *book, const uint8 ip[16])
+{
+   struct peer_addr *paddr;
+
+   if (!hashtable_lookup(book->hash_addr, ip, 16, (void **)&paddr)) {
+      return NULL;
+   }
+   return paddr;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
  * addrbook_get_path --
  *
  *------------------------------------------------------------------------

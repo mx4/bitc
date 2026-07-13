@@ -19,6 +19,7 @@
 #include "btc-message.h"
 #include "peer.h"
 #include "peergroup.h"
+#include "peerstats.h"
 #include "hash.h"
 #include "block-store.h"
 #include "addrbook.h"
@@ -90,6 +91,7 @@ struct peer {
    struct buff            *sendBuf;
 
    mtime_t                 last_ts;
+   mtime_t                 connectStartTS;  /* time_get() when netasync_connect was issued */
    uint64                  pingNonce;
    bool                    connected;
    bool                    got_version;
@@ -439,6 +441,19 @@ peer_handshake_ok(struct peer *peer)
 
    /* the below should always be true */
    ASSERT(peer->protversion >= BTC_PROTO_ADDR_W_TIME);
+
+   /*
+    * Record this peer's handshake latency and real (not self-advertised)
+    * services now, while we have a validated connection -- this is the
+    * signal peergroup_refill uses to prefer known-good peers (especially
+    * proven compact-filter servers) over the address book's largely-
+    * unverified pool. See core/peerstats.c.
+    */
+   if (btc->peerGroup && btc->peerGroup->peerStats) {
+      mtime_t latencyUsec = time_get() - peer->connectStartTS;
+      peerstats_record_handshake(btc->peerGroup->peerStats, peer_get_ip(peer),
+                                 (uint32)latencyUsec, peer->services);
+   }
 
    res = peer_send_getaddr(peer);
    if (res) {
@@ -1430,11 +1445,12 @@ peer_add(struct peer_addr *paddr,
    struct peer *peer;
 
    peer = safe_calloc(1, sizeof *peer);
-   peer->magic     = PEER_MAGIC;
-   peer->sock      = netasync_create();
-   peer->paddr     = paddr;
-   peer->clientStr = safe_strdup("");
-   peer->pingNonce = 0xdead0000;
+   peer->magic          = PEER_MAGIC;
+   peer->sock           = netasync_create();
+   peer->paddr          = paddr;
+   peer->clientStr      = safe_strdup("");
+   peer->pingNonce      = 0xdead0000;
+   peer->connectStartTS = time_get();
    snprintf(peer->name, sizeof peer->name, "peer_%05u", seq);
 
    ASSERT(paddr->connected == 0);
@@ -1509,6 +1525,21 @@ peer_get_services(struct circlist_item *li)
    struct peer *peer = GET_PEER(li);
    ASSERT(peer->magic == PEER_MAGIC);
    return peer->services;
+}
+
+
+/*
+ *-------------------------------------------------------------------------
+ *
+ * peer_get_ip --
+ *
+ *-------------------------------------------------------------------------
+ */
+const uint8 *
+peer_get_ip(const struct peer *peer)
+{
+   ASSERT(peer->magic == PEER_MAGIC);
+   return peer->paddr->addr.ip;
 }
 
 

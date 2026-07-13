@@ -146,6 +146,7 @@ BTC_FILES += core/rpc.c
 BTC_FILES += core/hash.c
 BTC_FILES += core/gcs.c
 BTC_FILES += core/cfheader-store.c
+BTC_FILES += core/peerstats.c
 BTC_FILES += core/ripemd160.c
 
 BTC_FILES += lib/hashtable/hashtable.c
