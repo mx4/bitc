@@ -331,7 +331,7 @@ txdb_serialize_tx_key(uint64 tx_seq,
 
    buf = buff_alloc();
 
-   snprintf(str, sizeof str, "/tx/%010llu/%s", tx_seq, hashStr);
+   snprintf(str, sizeof str, "/tx/%010" PRIu64 "/%s", tx_seq, hashStr);
    serialize_bytes(buf, str, strlen(str) + 1); /* include terminal '\0' */
 
    log_info(LGPFX" adding %s seq=%" PRIu64 " : '%s'\n", hashStr, tx_seq, str);
@@ -361,7 +361,7 @@ txdb_deserialize_tx_key(const void *key,
 
    tx = safe_calloc(1, sizeof *tx);
 
-   n = sscanf(key, "/tx/%010llu/%s", &tx->seq, hashStr);
+   n = sscanf(key, "/tx/%010" SCNu64 "/%s", &tx->seq, hashStr);
    ASSERT(n == 2);
    s = uint256_from_str(hashStr, &tx->txHash);
    ASSERT(s);

@@ -301,7 +301,7 @@ LogPrintf(bool warning,
    localtime_r(&tv.tv_sec, &tmp);
 
    strftime(tsPfx0, sizeof tsPfx0, "%T", &tmp);
-   snprintf(tsPfx, sizeof tsPfx, "%s.%06llu", tsPfx0, (uint64)(tv.tv_nsec / 1000));
+   snprintf(tsPfx, sizeof tsPfx, "%s.%06" PRIu64, tsPfx0, (uint64)(tv.tv_nsec / 1000));
 
    vsnprintf(msg, sizeof msg, format, args);
 
