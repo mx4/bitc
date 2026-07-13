@@ -504,37 +504,25 @@ peer_destroy(struct circlist_item *li,
    peer->connected = 0;
 
    /*
-    * If this was the peer driving header download, relinquish that role so the
-    * next peer to connect can take over (see peergroup_download_headers).
+    * If this was the peer driving header/cfheader download, relinquish that
+    * role so the next peer to connect can take over (see
+    * peergroup_download_headers / peergroup_download_filtered_blocks).
     */
    if (btc->peerGroup && btc->peerGroup->downloadPeer == peer) {
-      bool wasCfilterDriver = btc->peerGroup->cfBatchRemaining > 0;
-
       btc->peerGroup->downloadPeer = NULL;
-
-      /*
-       * This peer was mid-stream on a getcfilters batch (cfBatchRemaining
-       * outstanding responses) when it disconnected. The rest of that batch
-       * will never arrive, and nothing else re-requests it, which otherwise
-       * wedges the whole cfilter scan forever waiting for a batch-drained
-       * event that can no longer happen. Reset the count and signal
-       * peergroup_notify_peer_gone to resume with another peer.
-       */
-      if (wasCfilterDriver && !btc->peerGroup->cfDriverGone) {
-         log_warn(LGPFX" %s: was cfilter batch driver (%d responses still "
-                 "outstanding); resetting batch.\n",
-                 peer->name, btc->peerGroup->cfBatchRemaining);
-         btc->peerGroup->cfBatchRemaining = 0;
-         btc->peerGroup->cfDriverGone = 1;
-      }
    }
+
+   /*
+    * If this peer owned any in-flight parallel cfilter-scan chunks, requeue
+    * them for another connected filter peer instead of leaving that height
+    * range permanently unscanned.
+    */
+   peergroup_requeue_peer_chunks(peer);
 
    /*
     * If we're mid cfcheckpt verification and were waiting on a response from
     * this peer, it can no longer answer -- revise the target down instead of
-    * hanging forever. If a cfilter batch was just reset above, this also
-    * tries to resume the scan with another connected peer (see
-    * peergroup_notify_peer_gone).
+    * hanging forever.
     */
    peergroup_notify_peer_gone(peer);
 
@@ -1130,9 +1118,15 @@ peer_handle_cfilter(struct peer *peer)
       log_warn(LGPFX" %s: failed to parse cfilter.\n", peer->name);
       return res;
    }
-   log_info(LGPFX" %s: cfilter type=%u numBytes=%llu\n",
-       peer->name, cf.filterType, (unsigned long long)cf.numBytes);
-
+   /*
+    * No per-filter log line here (previously logged type+size on every
+    * single filter): a `sample` profile of a live scan showed ~69% of all
+    * poll-thread CPU time was this call blocked on the mutex inside
+    * bitcui_req_enqueue (log_info forwards to the ncurses UI's log queue
+    * when the UI is active), not any actual verification/matching work.
+    * peer_receive_cb's generic per-message log already exempts CFILTER for
+    * the same reason.
+    */
    res = peergroup_handle_cfilter(peer, &cf);
 
    btc_msg_cfilter_free(&cf);
@@ -1297,9 +1291,18 @@ peer_receive_cb(struct netasync_socket *sock,
       }
       goto next;
    }
+   /*
+    * CFILTER is exempted alongside the other high-frequency message types
+    * below: a cfilter scan can stream hundreds of these per second per peer,
+    * and logging every single one (each log call does a synchronous
+    * fflush(), see LogPrintf) measurably eats into the single poll thread's
+    * CPU budget at that rate -- the same reason INV/ADDR/PING/PONG were
+    * already excluded here.
+    */
    if (DOLOG(1) ||
        (msg != BTC_MSG_INV && msg != BTC_MSG_ADDR &&
-        msg != BTC_MSG_PING && msg != BTC_MSG_PONG)) {
+        msg != BTC_MSG_PING && msg != BTC_MSG_PONG &&
+        msg != BTC_MSG_CFILTER)) {
       log_info(LGPFX" %s: %15s -- received %-12s: %zu bytes.\n",
           peer->name, peer->clientStr, peer->msgHdr.message,
           buff_maxlen(&peer->recvBuf));

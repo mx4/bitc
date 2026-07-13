@@ -36,8 +36,35 @@
  */
 #define SYNC_STALL_USEC (10 * 1000 * 1000)  /* 10 seconds */
 
+/*
+ * Max cfilters per getcfilters request (BIP157 limit); also the chunk size
+ * for the parallel cfilter scan. Defined here (rather than next to its main
+ * user, peergroup_assign_chunk) because CF_CHUNK_INDEX and
+ * peergroup_handle_cfilter, both much earlier in the file, need it too.
+ */
+#define CFILTER_BATCH 1000
+
+/*
+ * BIP157 fixes the getcfcheckpt interval at 1000 blocks (a spec constant,
+ * not configurable) -- kept as a separate name from CFILTER_BATCH even
+ * though both happen to be 1000, since they mean different things: one is
+ * our chosen chunk size, the other is the wire protocol's checkpoint
+ * spacing.
+ */
+#define BIP157_CHECKPOINT_INTERVAL 1000
+
+/* Which cfSeg[] entry covers a given absolute block height. */
+#define CF_CHUNK_INDEX(_pg, _height) (((_height) - (_pg)->cfScanFloor) / CFILTER_BATCH)
+
+/* Cap on concurrently in-flight cfilter chunks, so a large -n doesn't fan out
+ * an unbounded number of simultaneous getcfilters streams. */
+#define MAX_INFLIGHT_CHUNKS 64
+
 /* Forward declarations. */
-static int peergroup_request_cfilters(struct peer *peer);
+static void peergroup_schedule_cfilters(void);
+static void peergroup_assign_next_chunk_to(struct peer *peer);
+static void peergroup_advance_lastblk(void);
+static void peergroup_maybe_complete(void);
 static int peergroup_request_cfheaders(struct peer *peer);
 static int peergroup_verify_cfcheckpts(struct peer *peer);
 static void peergroup_add_pending_block(const uint256 *hash, struct peer *from);
@@ -327,9 +354,27 @@ static void
 peergroup_download_progress(void)
 {
    struct peergroup *pg = btc->peerGroup;
+   static mtime_t lastUIUpdateTS;
+   mtime_t now = time_get();
 
    /* Any call here means the sync just made forward progress. */
-   pg->lastProgressTS = time_get();
+   pg->lastProgressTS = now;
+
+   /*
+    * bitcui_set_catchup_info() below funnels through the UI's request queue
+    * (bitcui_req_enqueue), which is mutex-shared with the render thread. The
+    * BIP157 cfilter path calls this function once per verified FILTER --
+    * hundreds/sec during a scan -- and a `sample` profile showed that lock
+    * wait alone was the single largest consumer of poll-thread CPU. A
+    * progress bar visibly updating 10x/sec is indistinguishable from one
+    * updating on every filter, so throttle the actual UI push; the cheap
+    * lastProgressTS stall-detection timestamp above is still updated on
+    * every call, unthrottled.
+    */
+   if (now - lastUIUpdateTS < 100 * 1000 /* 100ms */) {
+      return;
+   }
+   lastUIUpdateTS = now;
 
    /*
     * In the BIP157 path, report cfilter scan progress (how many cfilters
@@ -453,6 +498,8 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    size_t numScripts;
    uint256 blockHash;
    int blockHeight;
+   struct cf_segment *seg = NULL;
+   bool mine;
    bool match;
    int res;
 
@@ -474,6 +521,10 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
     * filterHash = hash256(filterData); this must match the stored hash at
     * this height, and filterHeader = hash256(filterHash || prevFilterHeader)
     * must match the stored header. This is what makes BIP157 trust-minimized.
+    * This check is independent of which peer/chunk this filter is
+    * associated with -- verification is keyed purely by height -- so it is
+    * always performed, even for a filter that arrives after its chunk was
+    * reassigned to someone else (see 'mine' below).
     */
    if (pg->cfStore) {
       uint256 storedHash;
@@ -491,33 +542,60 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
                  "Peer may be serving fake filters.\n", blockHeight);
          return 1;
       }
-      log_info(LGPFX" BIP157: cfilter verified at height %d.\n", blockHeight);
+      /*
+       * No per-filter success log here: at a few hundred filters/sec this
+       * line alone (plus LogPrintf's fflush()) was a measurable share of the
+       * single poll thread's CPU. Chunk-level "assigned"/"complete" already
+       * report coarser progress; a mismatch above still logs immediately.
+       */
    }
 
    pg->cfVerified++;
    peergroup_download_progress();
 
    /*
-    * Persist progress: update lastBlk to this cfilter's block hash so the
-    * periodic save (and clean exit) writes a resume point that reflects
-    * how far the cfilter scan has actually gotten. The cfilter stream is
-    * sequential (getcfilters requests a contiguous range), so this is
-    * always the furthest-verified height. Without this, lastBlk stays at
-    * its initial value (zero or stale) because the old 'blockstore_is_next'
-    * check in the no-match path below almost never fires for out-of-order
-    * blocks, and an interrupted run restarts from scratch.
+    * Locate the chunk covering this height and confirm this peer is still
+    * the one it was assigned to (chunks are fixed-size and cfSeg is indexed
+    * directly by height, so this is O(1), not a search). A cfilter arriving
+    * from any other peer -- a late reply after the chunk was reassigned on
+    * disconnect/stall (peergroup_requeue_peer_chunks /
+    * peergroup_check_pending_chunks), a duplicate, or an unsolicited send --
+    * has already been cryptographically verified above, so it is harmless to
+    * have received, but must NOT affect chunk bookkeeping: double-decrementing
+    * 'remaining' would mark the chunk done early and let the resume watermark
+    * skip past heights nobody actually scanned.
     */
-   peergroup_set_lastblk(pg, &blockHash);
+   mine = 0;
+   if (pg->cfSeg != NULL) {
+      int idx = CF_CHUNK_INDEX(pg, blockHeight);
+      if (idx >= 0 && idx < pg->cfSegCount) {
+         seg = &pg->cfSeg[idx];
+         mine = (seg->assignedPeer == peer && !seg->done);
+      }
+   }
 
-   /*
-    * One response for the current getcfilters batch has now been consumed,
-    * regardless of what we do with it below (match, no match, or an early
-    * skip). Decrement here, once, unconditionally, so every code path below
-    * -- including the 'match' path, which used to return early before ever
-    * reaching the batch-refill logic -- is covered by the same bookkeeping.
-    */
-   if (pg->cfBatchRemaining > 0) {
-      pg->cfBatchRemaining--;
+   if (mine) {
+      seg->remaining--;
+      seg->progressTS = time_get();
+      if (seg->remaining <= 0) {
+         seg->done = 1;
+         log_info(LGPFX" BIP157: cfilter chunk [%d..%d] complete.\n",
+             seg->startHeight, seg->endHeight);
+         while (pg->cfDoneContig < pg->cfSegCount &&
+                pg->cfSeg[pg->cfDoneContig].done) {
+            pg->cfDoneContig++;
+         }
+         /*
+          * Persist progress: advance the resume pointer as far as is safe
+          * (every height up to the contiguous watermark has been verified,
+          * and no matched-but-unprocessed block is being skipped over). See
+          * peergroup_advance_lastblk. Without this, an interrupted run would
+          * restart from scratch.
+          */
+         peergroup_advance_lastblk();
+         /* Keep this peer busy: hand it the next unclaimed chunk, if any. */
+         peergroup_assign_next_chunk_to(peer);
+      }
    }
 
    /*
@@ -564,36 +642,6 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
       if (res) {
          return res;
       }
-   } else {
-      /*
-       * No match: lastBlk was already advanced above (every verified
-       * cfilter updates it, regardless of match status).
-       */
-   }
-
-   /*
-    * If we've processed all cfilters and caught up to the tip, we're done.
-    */
-   if (pg->cfScanHeight > pg->cfTipHeight && pg->cfBatchRemaining == 0) {
-      uint256 best_hash;
-      uint256 lastTxdb;
-      blockstore_get_best_hash(bs, &best_hash);
-      peergroup_get_lastblk(pg, &lastTxdb);
-      if (uint256_issame(&lastTxdb, &best_hash)) {
-         peergroup_download_complete();
-         return 0;
-      }
-   }
-
-   /*
-    * Request the next batch of cfilters only once the current one has been
-    * fully drained (peergroup_request_cfilters itself also guards on
-    * cfBatchRemaining, so this check is belt-and-suspenders, but keeping it
-    * here avoids even making the call -- and its log line -- on every one
-    * of the up-to-1000 individual cfilter responses in a batch).
-    */
-   if (pg->cfBatchRemaining == 0 && pg->cfScanHeight <= pg->cfTipHeight) {
-      return peergroup_request_cfilters(peer);
    }
 
    return 0;
@@ -618,9 +666,359 @@ peergroup_add_pending_block(const uint256 *hash, struct peer *from)
                                    pg->cfPendingCap * sizeof *pg->cfPending);
    }
    pg->cfPending[pg->cfBlocksPending].hash          = *hash;
+   pg->cfPending[pg->cfBlocksPending].height        =
+      blockstore_get_block_height(btc->blockStore, hash);
    pg->cfPending[pg->cfBlocksPending].requestedFrom = from;
    pg->cfPending[pg->cfBlocksPending].requestTS     = time_get();
    pg->cfBlocksPending++;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_maybe_complete --
+ *
+ *      Shared completion check for the parallel cfilter scan: every chunk
+ *      verified, no matched block still in flight, and the resume pointer
+ *      has caught up to the current chain tip.
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_maybe_complete(void)
+{
+   struct peergroup *pg = btc->peerGroup;
+   struct blockstore *bs = btc->blockStore;
+   uint256 best_hash;
+   uint256 lastTxdb;
+
+   if (btc->state != BITC_STATE_UPDATE_TXDB) {
+      return;
+   }
+   if (pg->cfDoneContig < pg->cfSegCount || pg->cfBlocksPending != 0) {
+      return;
+   }
+   blockstore_get_best_hash(bs, &best_hash);
+   peergroup_get_lastblk(pg, &lastTxdb);
+   if (uint256_issame(&lastTxdb, &best_hash)) {
+      peergroup_download_complete();
+   }
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_advance_lastblk --
+ *
+ *      Advance the crash-safe resume pointer (peergroup.lastblk) as far as
+ *      is currently safe. Chunks can complete out of order, so the furthest
+ *      point we may claim as "verified" is the contiguous watermark
+ *      (cfDoneContig chunks from the scan floor, with no gap) -- NOT simply
+ *      the highest chunk that happens to be done. That watermark is further
+ *      clamped to just below the lowest still-in-flight matched-block fetch
+ *      (cfPending), so a crash can never lose a transaction whose block was
+ *      matched but not yet processed into the wallet. This makes the
+ *      parallel scan's resume point strictly safer than the old serial
+ *      scan's, which advanced lastBlk on every verified cfilter regardless
+ *      of pending matched blocks.
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_advance_lastblk(void)
+{
+   struct peergroup *pg = btc->peerGroup;
+   struct blockstore *bs = btc->blockStore;
+   uint256 curLastBlk;
+   uint256 hash;
+   int contigHeight;
+   int minPending;
+   int safeHeight;
+   int curHeight;
+   int i;
+
+   if (pg->cfDoneContig == 0) {
+      return;
+   }
+
+   contigHeight = pg->cfSeg[pg->cfDoneContig - 1].endHeight;
+
+   minPending = INT_MAX;
+   for (i = 0; i < pg->cfBlocksPending; i++) {
+      if (pg->cfPending[i].height < minPending) {
+         minPending = pg->cfPending[i].height;
+      }
+   }
+
+   safeHeight = MIN(contigHeight, minPending - 1);
+   if (safeHeight < pg->cfScanFloor) {
+      return;
+   }
+
+   peergroup_get_lastblk(pg, &curLastBlk);
+   curHeight = blockstore_get_block_height(bs, &curLastBlk);
+   if (safeHeight <= curHeight) {
+      return;   /* no forward progress */
+   }
+
+   if (!blockstore_get_block_at_height(bs, safeHeight, &hash, NULL)) {
+      log_warn(LGPFX" BIP157: cannot get block hash at height %d for resume pointer.\n",
+              safeHeight);
+      return;
+   }
+   peergroup_set_lastblk(pg, &hash);
+   peergroup_maybe_complete();
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_assign_chunk --
+ *
+ *      Send getcfilters for one scan chunk to 'peer' and mark it assigned.
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_assign_chunk(struct peer *peer, struct cf_segment *seg)
+{
+   struct blockstore *bs = btc->blockStore;
+   uint256 stopHash;
+   int res;
+
+   res = blockstore_get_block_at_height(bs, seg->endHeight, &stopHash, NULL);
+   if (!res) {
+      log_warn(LGPFX" BIP157: cannot get block hash at height %d for cfilter chunk.\n",
+              seg->endHeight);
+      return;
+   }
+
+   res = peer_send_getcfilters(peer, BTC_CFILTER_TYPE_BASIC,
+                               seg->startHeight, &stopHash);
+   if (res) {
+      log_warn(LGPFX" BIP157: failed to send getcfilters [%d..%d] to %s.\n",
+              seg->startHeight, seg->endHeight, peer_name(peer));
+      return;
+   }
+
+   seg->assignedPeer = peer;
+   seg->avoidPeer    = NULL;
+   seg->remaining    = seg->endHeight - seg->startHeight + 1;
+   seg->progressTS   = time_get();
+   seg->assignedTS   = seg->progressTS;
+
+   log_info(LGPFX" BIP157: assigned cfilter chunk [%d..%d] to %s.\n",
+       seg->startHeight, seg->endHeight, peer_name(peer));
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_assign_next_chunk_to --
+ *
+ *      Give 'peer' the next unclaimed chunk (never assigned, or requeued
+ *      after a disconnect/stall), if any remain. Called when a peer's
+ *      current chunk finishes, to keep it continuously busy without
+ *      round-tripping through the full scheduler. Skips a chunk whose
+ *      avoidPeer is this same peer (see struct cf_segment) so a peer that
+ *      just stalled on a chunk isn't immediately handed the same chunk back.
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_assign_next_chunk_to(struct peer *peer)
+{
+   struct peergroup *pg = btc->peerGroup;
+   int i;
+
+   for (i = 0; i < pg->cfSegCount; i++) {
+      struct cf_segment *seg = &pg->cfSeg[i];
+      if (seg->assignedPeer == NULL && !seg->done && seg->avoidPeer != peer) {
+         peergroup_assign_chunk(peer, seg);
+         return;
+      }
+   }
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_schedule_cfilters --
+ *
+ *      Fan out unclaimed cfilter chunks to every idle, connected,
+ *      NODE_COMPACT_FILTERS-capable peer, up to MAX_INFLIGHT_CHUNKS chunks
+ *      in flight at once. This is what makes the cfilter scan parallel:
+ *      instead of one peer streaming the whole [floor, tip] range
+ *      sequentially, every filter-capable peer streams a different chunk
+ *      concurrently. Safe to call any time (new peer joining, periodic tick,
+ *      after a requeue); peers that already own a live chunk, or chunks that
+ *      are already claimed or done, are simply skipped.
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_schedule_cfilters(void)
+{
+   struct peergroup *pg = btc->peerGroup;
+   struct circlist_item *li;
+   int inflight;
+   int i;
+
+   if (pg->cfSeg == NULL) {
+      return;
+   }
+
+   inflight = 0;
+   for (i = 0; i < pg->cfSegCount; i++) {
+      if (pg->cfSeg[i].assignedPeer != NULL && !pg->cfSeg[i].done) {
+         inflight++;
+      }
+   }
+
+   CIRCLIST_SCAN(li, pg->peer_list) {
+      struct peer *p;
+      bool busy;
+
+      if (inflight >= MAX_INFLIGHT_CHUNKS) {
+         break;
+      }
+      if (!peer_is_connected(li) ||
+          !(peer_get_services(li) & BTC_SERVICE_NODE_COMPACT_FILTERS)) {
+         continue;
+      }
+      p = peer_from_li(li);
+
+      busy = 0;
+      for (i = 0; i < pg->cfSegCount; i++) {
+         if (pg->cfSeg[i].assignedPeer == p && !pg->cfSeg[i].done) {
+            busy = 1;
+            break;
+         }
+      }
+      if (busy) {
+         continue;
+      }
+
+      for (i = 0; i < pg->cfSegCount; i++) {
+         struct cf_segment *seg = &pg->cfSeg[i];
+         if (seg->assignedPeer == NULL && !seg->done && seg->avoidPeer != p) {
+            peergroup_assign_chunk(p, seg);
+            inflight++;
+            break;
+         }
+      }
+   }
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_check_pending_chunks --
+ *
+ *      Periodic check: a chunk whose assigned peer is connected but has made
+ *      no progress on it for SYNC_STALL_USEC (unlike a hard disconnect,
+ *      which peergroup_requeue_peer_chunks handles immediately) is requeued
+ *      for another peer. Already-received heights within the chunk re-verify
+ *      idempotently when the reassigned peer streams it again.
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_check_pending_chunks(void)
+{
+   struct peergroup *pg = btc->peerGroup;
+   mtime_t now = time_get();
+   bool anyRequeued = 0;
+   int i;
+
+   if (pg->cfSeg == NULL) {
+      return;
+   }
+
+   for (i = 0; i < pg->cfSegCount; i++) {
+      struct cf_segment *seg = &pg->cfSeg[i];
+
+      if (seg->done || seg->assignedPeer == NULL) {
+         continue;
+      }
+      if (now < seg->progressTS || now - seg->progressTS < SYNC_STALL_USEC) {
+         continue;
+      }
+      log_warn(LGPFX" BIP157: cfilter chunk [%d..%d] stalled on %s; requeuing.\n",
+              seg->startHeight, seg->endHeight, peer_name(seg->assignedPeer));
+      /*
+       * Remember who just failed this chunk so the scheduler below (and any
+       * later assign_next_chunk_to call) doesn't immediately hand it right
+       * back to the same still-connected, still-"idle" peer -- which would
+       * otherwise re-stall on the same chunk every SYNC_STALL_USEC forever,
+       * making zero progress on it while also blocking that peer from being
+       * tried on a different, possibly-fine chunk.
+       */
+      seg->avoidPeer    = seg->assignedPeer;
+      seg->assignedPeer = NULL;
+      seg->remaining    = seg->endHeight - seg->startHeight + 1;
+      anyRequeued = 1;
+   }
+
+   if (anyRequeued) {
+      peergroup_schedule_cfilters();
+   }
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
+ * peergroup_requeue_peer_chunks --
+ *
+ *      Called from peer_destroy() for every disconnecting peer. Any cfilter
+ *      scan chunk this peer owned is requeued (not lost) so the scheduler
+ *      hands it to another connected filter peer, instead of that height
+ *      range going permanently unscanned.
+ *
+ *      Deliberately does NOT record a peerstats cfilter failure here: unlike
+ *      a stall (peergroup_check_pending_chunks), a disconnect can happen for
+ *      reasons that say nothing about this peer's quality -- we hit -n and
+ *      evicted it, the process is exiting, a transient network blip -- and
+ *      penalizing it would wrongly demote an otherwise-good peer out of the
+ *      preferred set.
+ *
+ *------------------------------------------------------------------------
+ */
+void
+peergroup_requeue_peer_chunks(struct peer *peer)
+{
+   struct peergroup *pg = btc->peerGroup;
+   bool anyRequeued = 0;
+   int i;
+
+   if (pg == NULL || pg->cfSeg == NULL) {
+      return;
+   }
+
+   for (i = 0; i < pg->cfSegCount; i++) {
+      struct cf_segment *seg = &pg->cfSeg[i];
+
+      if (seg->assignedPeer == peer && !seg->done) {
+         log_warn(LGPFX" BIP157: requeuing cfilter chunk [%d..%d] "
+                 "(peer %s gone).\n",
+                 seg->startHeight, seg->endHeight, peer_name(peer));
+         seg->avoidPeer    = peer;
+         seg->assignedPeer = NULL;
+         seg->remaining    = seg->endHeight - seg->startHeight + 1;
+         anyRequeued = 1;
+      }
+   }
+
+   if (anyRequeued) {
+      peergroup_schedule_cfilters();
+   }
 }
 
 
@@ -789,8 +1187,6 @@ peergroup_download_headers(struct peer *peer,
  *------------------------------------------------------------------------
  */
 
-#define CFILTER_BATCH 1000  /* max cfilters per getcfilters request (BIP157 limit) */
-
 static int
 peergroup_download_filtered_blocks(struct peer *peer)
 {
@@ -810,15 +1206,26 @@ peergroup_download_filtered_blocks(struct peer *peer)
           btc->state == BITC_STATE_UPDATE_TXDB);
 
    /*
-    * Only one peer drives cfheader/cfilter sync at a time, exactly like
-    * header sync below. Without this guard, every peer that completes its
-    * handshake while we're in BITC_STATE_UPDATE_TXDB independently calls in
-    * here and races the scan forward (cfScanHeight/cfhdrStartHeight get
-    * bumped by each one), corrupting the shared progress counters.
+    * cfcheckpt verification and cfheader sync remain single-driver, exactly
+    * like header sync below: the cfheader hash chain has a genuine
+    * sequential dependency (each batch commits to the previous one), so
+    * letting every peer race it forward would corrupt cfhdrStartHeight.
+    * Once cfheader sync is done, the (much larger) cfilter scan is handed
+    * off to peergroup_schedule_cfilters, which fans out to every connected
+    * filter-capable peer -- see the 'else' branch below.
     */
    if (pg->downloadPeer == NULL) {
       pg->downloadPeer = peer;
    } else if (pg->downloadPeer != peer) {
+      if (btc->state == BITC_STATE_UPDATE_TXDB && pg->cfcheckptVerified &&
+          pg->cfhdrStartHeight > pg->cfhdrTipHeight) {
+         /*
+          * cfheader sync is complete: this peer (and any other idle,
+          * filter-capable peer) can join the parallel cfilter scan instead
+          * of sitting out the whole thing.
+          */
+         peergroup_schedule_cfilters();
+      }
       return 0;
    }
 
@@ -870,6 +1277,9 @@ peergroup_download_filtered_blocks(struct peer *peer)
 
    if (first) {
       char hashStr[80];
+      int startHeight;
+      int tipHeight;
+
       peergroup_set_lastblk(pg, &startHash);
 
       pg->numToFetch = blockstore_get_height(bs)
@@ -878,52 +1288,80 @@ peergroup_download_filtered_blocks(struct peer *peer)
       log_info(LGPFX" downloading starting at %s\n", hashStr);
 
       /*
-       * BIP157: initialize the cfilter scan height from the start hash.
+       * BIP157: initialize the parallel cfilter scan. The range
+       * [startHeight, tipHeight] is fixed for this pass and carved up front
+       * into cfSegCount fixed-size chunks (see struct cf_segment), so
+       * multiple peers can each claim and stream a different chunk
+       * concurrently (peergroup_schedule_cfilters), instead of one peer
+       * streaming the whole range sequentially.
        */
-      if (1) {
-         int startHeight = blockstore_get_block_height(bs, &startHash);
-         int tipHeight = blockstore_get_height(bs);
+      startHeight = blockstore_get_block_height(bs, &startHash);
+      tipHeight   = blockstore_get_height(bs);
 
-         pg->cfScanHeight  = startHeight;
-         pg->cfTipHeight   = tipHeight;
-         pg->cfVerified     = startHeight;
+      pg->cfScanFloor  = startHeight;
+      pg->cfTipHeight  = tipHeight;
+      pg->cfVerified   = startHeight;
+      pg->cfDoneContig = 0;
+
+      free(pg->cfSeg);
+      pg->cfSeg      = NULL;
+      pg->cfSegCount = 0;
+
+      if (tipHeight >= startHeight) {
+         int nChunks = (tipHeight - startHeight) / CFILTER_BATCH + 1;
+         int i;
+
+         pg->cfSeg = safe_calloc(nChunks, sizeof *pg->cfSeg);
+         pg->cfSegCount = nChunks;
+         for (i = 0; i < nChunks; i++) {
+            int chunkStart = startHeight + i * CFILTER_BATCH;
+            int chunkEnd   = MIN(chunkStart + CFILTER_BATCH - 1, tipHeight);
+
+            pg->cfSeg[i].startHeight  = chunkStart;
+            pg->cfSeg[i].endHeight    = chunkEnd;
+            pg->cfSeg[i].remaining    = chunkEnd - chunkStart + 1;
+            pg->cfSeg[i].assignedPeer = NULL;
+            pg->cfSeg[i].done         = 0;
+            pg->cfSeg[i].progressTS   = 0;
+         }
+      }
+
+      /*
+       * Initialize cfheader sync: start from the tip of the stored
+       * cfheader chain (or 0 if empty), up to the block tip.
+       */
+      {
+         int cfTip = -1;
+         if (pg->cfStore) {
+            cfTip = cfheaderstore_get_tip_height(pg->cfStore);
+         }
+         pg->cfhdrStartHeight = cfTip + 1;  /* -1 + 1 = 0 if empty */
+         pg->cfhdrTipHeight   = tipHeight;
 
          /*
-          * Initialize cfheader sync: start from the tip of the stored
-          * cfheader chain (or 0 if empty), up to the block tip.
+          * Set prevFilterHeader for the first batch: either the tip of
+          * the stored chain, or the zero hash if starting from scratch.
           */
-         {
-            int cfTip = -1;
-            if (pg->cfStore) {
-               cfTip = cfheaderstore_get_tip_height(pg->cfStore);
-            }
-            pg->cfhdrStartHeight = cfTip + 1;  /* -1 + 1 = 0 if empty */
-            pg->cfhdrTipHeight   = tipHeight;
-
-            /*
-             * Set prevFilterHeader for the first batch: either the tip of
-             * the stored chain, or the zero hash if starting from scratch.
-             */
-            if (cfTip >= 0 && pg->cfStore) {
-               cfheaderstore_get_header(pg->cfStore, cfTip,
-                                        &pg->cfhdrPrevHeader);
-            } else {
-               uint256_zero_out(&pg->cfhdrPrevHeader);
-            }
+         if (cfTip >= 0 && pg->cfStore) {
+            cfheaderstore_get_header(pg->cfStore, cfTip,
+                                     &pg->cfhdrPrevHeader);
+         } else {
+            uint256_zero_out(&pg->cfhdrPrevHeader);
          }
-
-         log_info(LGPFX" BIP157: cfheader sync from height %d to %d, "
-             "cfilter scan from %d to %d\n",
-             pg->cfhdrStartHeight, pg->cfhdrTipHeight,
-             pg->cfScanHeight, pg->cfTipHeight);
       }
+
+      log_info(LGPFX" BIP157: cfheader sync from height %d to %d, "
+          "cfilter scan from %d to %d (%d chunk%s)\n",
+          pg->cfhdrStartHeight, pg->cfhdrTipHeight,
+          pg->cfScanFloor, pg->cfTipHeight, pg->cfSegCount,
+          pg->cfSegCount == 1 ? "" : "s");
    }
 
    peergroup_download_progress();
 
    /*
     * BIP157 path: first verify cfcheckpts across peers, then sync cfheaders,
-    * then request cfilters.
+    * then fan out cfilter chunks to every filter-capable peer.
     */
    if (!pg->cfcheckptVerified) {
       return peergroup_verify_cfcheckpts(peer);
@@ -932,78 +1370,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
       /* cfheaders not yet synced to tip. */
       return peergroup_request_cfheaders(peer);
    }
-   return peergroup_request_cfilters(peer);
-}
-
-
-/*
- *------------------------------------------------------------------------
- *
- * peergroup_request_cfilters --
- *
- *      Send a getcfilters request for the next batch of block heights.
- *
- *------------------------------------------------------------------------
- */
-static int
-peergroup_request_cfilters(struct peer *peer)
-{
-   struct blockstore *bs = btc->blockStore;
-   struct peergroup *pg = btc->peerGroup;
-   btc_msg_getcfilters g;
-   uint256 stopHash;
-   int batchEnd;
-   int res;
-
-   ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
-
-   if (pg->cfScanHeight > pg->cfTipHeight) {
-      /* All cfilters requested; wait for responses to drain. */
-      log_info(LGPFX" BIP157: all cfilters requested up to height %d.\n",
-          pg->cfTipHeight);
-      return 0;
-   }
-
-   /*
-    * Do not send a new getcfilters batch while a previous one still has
-    * outstanding responses: a single getcfilters causes the peer to stream
-    * back one cfilter per height, not one combined reply, so calling this
-    * again before that stream finishes would desync cfScanHeight far ahead
-    * of what has actually been verified (see the comment on
-    * cfBatchRemaining in peergroup.h).
-    */
-   if (pg->cfBatchRemaining > 0) {
-      return 0;
-   }
-
-   batchEnd = MIN(pg->cfScanHeight + CFILTER_BATCH - 1, pg->cfTipHeight);
-
-   /*
-    * Get the block hash at batchEnd to use as stopHash.
-    */
-   res = blockstore_get_block_at_height(bs, batchEnd, &stopHash, NULL);
-   if (!res) {
-      log_warn(LGPFX" BIP157: cannot get block hash at height %d.\n",
-              batchEnd);
-      return 1;
-   }
-
-   g.filterType  = BTC_CFILTER_TYPE_BASIC;
-   g.startHeight = pg->cfScanHeight;
-   g.stopHash    = stopHash;
-
-   res = peer_send_getcfilters(peer, g.filterType, g.startHeight, &g.stopHash);
-   if (res) {
-      return res;
-   }
-
-   log_info(LGPFX" BIP157: requested cfilters for heights %d..%d\n",
-       pg->cfScanHeight, batchEnd);
-
-   pg->cfBatchRemaining = batchEnd - pg->cfScanHeight + 1;
-   pg->cfScanHeight = batchEnd + 1;
-   pg->lastFilteredBlockReq = stopHash;
-
+   peergroup_schedule_cfilters();
    return 0;
 }
 
@@ -1087,6 +1454,72 @@ peergroup_verify_cfcheckpts(struct peer *peer)
 /*
  *------------------------------------------------------------------------
  *
+ * peergroup_maybe_birthday_bound_cfheaders --
+ *
+ *      If the cfheader store is completely empty, anchor cfheader sync on a
+ *      cross-validated getcfcheckpt checkpoint near the cfilter scan's start
+ *      height instead of genesis: the cfilter scan only ever reads the
+ *      cfheader store at heights >= cfScanFloor
+ *      (cfheaderstore_get_hash, in peergroup_handle_cfilter), so a wallet
+ *      with a recent birth can skip syncing (and verifying) cfheaders for
+ *      the entire unused range below it. No-op if the store already has
+ *      entries (an in-progress or previously-completed sync must continue
+ *      contiguously from its own tip -- see cfheaderstore_append), or if no
+ *      checkpoints are available to anchor on (falls back to the existing
+ *      genesis-start behavior, just without the optimization).
+ *
+ *      Safe even if the checkpoint index math below were ever off: a wrong
+ *      cfhdrPrevHeader simply fails peergroup_handle_cfheaders's mismatch
+ *      check against the real chain (peers report their own honest
+ *      prevFilterHeader), which safely disconnects the peer rather than
+ *      accepting a wrong chain.
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+peergroup_maybe_birthday_bound_cfheaders(void)
+{
+   struct peergroup *pg = btc->peerGroup;
+   int cfTip;
+   int anchorHeight;
+   int idx;
+
+   cfTip = pg->cfStore ? cfheaderstore_get_tip_height(pg->cfStore) : -1;
+   if (cfTip >= 0) {
+      return;
+   }
+   if (pg->cfcheckptExpected == NULL || pg->cfcheckptCount == 0) {
+      return;
+   }
+
+   anchorHeight = (pg->cfScanFloor / BIP157_CHECKPOINT_INTERVAL) *
+                  BIP157_CHECKPOINT_INTERVAL;
+   if (anchorHeight <= 0) {
+      return;   /* nothing to skip; genesis start is already optimal */
+   }
+
+   /*
+    * cfcheckptExpected[i] is the filter header at height (i+1)*1000 - 1.
+    * We want the checkpoint at anchorHeight - 1 as the prevFilterHeader for
+    * a batch starting at anchorHeight, i.e. index (anchorHeight/1000 - 1).
+    */
+   idx = anchorHeight / BIP157_CHECKPOINT_INTERVAL - 1;
+   if (idx < 0 || idx >= pg->cfcheckptCount) {
+      return;   /* out of range; stay safe and start from genesis */
+   }
+
+   pg->cfhdrStartHeight = anchorHeight;
+   pg->cfhdrPrevHeader  = pg->cfcheckptExpected[idx];
+
+   log_info(LGPFX" BIP157: birthday-bounding cfheader sync to start at "
+       "height %d (checkpoint %d), skipping %d unused header%s.\n",
+       anchorHeight, idx, anchorHeight, anchorHeight == 1 ? "" : "s");
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
  * peergroup_cfcheckpt_maybe_complete --
  *
  *      Shared completion check for cfcheckpt verification: once we've heard
@@ -1108,6 +1541,7 @@ peergroup_cfcheckpt_maybe_complete(struct peer *driver)
    }
    if (pg->cfcheckptAgreed >= 1 && pg->cfcheckptAgreed >= pg->cfcheckptPeers) {
       pg->cfcheckptVerified = 1;
+      peergroup_maybe_birthday_bound_cfheaders();
       log_info(LGPFX" BIP157: cfcheckpt verified by %d peer%s; starting cfheader sync.\n",
           pg->cfcheckptAgreed, pg->cfcheckptAgreed > 1 ? "s" : "");
       return peergroup_request_cfheaders(driver);
@@ -1167,31 +1601,12 @@ peergroup_notify_peer_gone(struct peer *peer)
    }
 
    /*
-    * Case 2: this peer was the cfilter/cfheader batch driver and got reset
-    * to 0 outstanding responses by peer_destroy (see there) because it
-    * disconnected mid-stream. Resume with another connected peer so the
-    * scan doesn't wedge forever waiting for a batch-drained event from a
-    * peer that no longer exists. Only trigger when cfDriverGone is set
-    * (i.e., the disconnecting peer was actually the batch driver), not for
-    * every unrelated peer disconnect.
+    * Case 2: this peer owned one or more in-flight cfilter scan chunks.
+    * Unlike the old single-driver model, the parallel scan has no single
+    * "batch driver" to resume -- any chunk this peer held is simply
+    * requeued for another connected filter peer (see
+    * peergroup_requeue_peer_chunks, called from peer_destroy).
     */
-   if (pg->cfDriverGone) {
-      pg->cfDriverGone = 0;
-      if (btc->state == BITC_STATE_UPDATE_TXDB &&
-          pg->downloadPeer == NULL && pg->cfcheckptVerified &&
-          pg->cfScanHeight <= pg->cfTipHeight) {
-         CIRCLIST_SCAN(li, pg->peer_list) {
-            struct peer *cand = peer_from_li(li);
-            if (cand != peer && peer_is_connected(li)) {
-               log_warn(LGPFX" BIP157: resuming cfilter scan via %s after "
-                       "driver disconnect.\n", peer_name(cand));
-               pg->downloadPeer = cand;
-               peergroup_request_cfilters(cand);
-               break;
-            }
-         }
-      }
-   }
 }
 
 
@@ -1284,10 +1699,11 @@ peergroup_request_cfheaders(struct peer *peer)
    pg->cfhdrSyncStarted = 1;
 
    if (pg->cfhdrStartHeight > pg->cfhdrTipHeight) {
-      /* All cfheaders requested; move on to cfilters. */
-      log_info(LGPFX" BIP157: cfheaders synced to height %d; requesting cfilters.\n",
+      /* All cfheaders requested; move on to the parallel cfilter scan. */
+      log_info(LGPFX" BIP157: cfheaders synced to height %d; starting cfilter scan.\n",
           pg->cfhdrTipHeight);
-      return peergroup_request_cfilters(peer);
+      peergroup_schedule_cfilters();
+      return 0;
    }
 
    batchEnd = MIN(pg->cfhdrStartHeight + CFHEADER_BATCH - 1, pg->cfhdrTipHeight);
@@ -1418,7 +1834,8 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
 
    log_info(LGPFX" BIP157: cfheader sync complete to height %d.\n",
        pg->cfhdrTipHeight);
-   return peergroup_request_cfilters(peer);
+   peergroup_schedule_cfilters();
+   return 0;
 }
 
 
@@ -1438,7 +1855,6 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
    struct blockstore *bs = btc->blockStore;
    struct peergroup *pg = btc->peerGroup;
    uint256 blockHash;
-   uint256 lastTxdb;
    int blockHeight;
    int res = 0;
    uint64 i;
@@ -1452,15 +1868,6 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
 
    log_info(LGPFX" BIP157: received matched block at height %d, %llu txs\n",
        blockHeight, (unsigned long long)blk->txCount);
-
-   /*
-    * Advance the lastblk pointer if this block is next in chain.
-    */
-   peergroup_get_lastblk(pg, &lastTxdb);
-   if (btc->state == BITC_STATE_UPDATE_TXDB &&
-       blockstore_is_next(bs, &lastTxdb, &blockHash)) {
-      peergroup_set_lastblk(pg, &blockHash);
-   }
 
    /*
     * Feed each transaction to the wallet for credit/debit detection.
@@ -1491,11 +1898,15 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
    }
 
    /*
-    * This block was fetched because its cfilter matched. Account for it and,
-    * if --stop-after-height was requested and this was the last in-flight
-    * block, stop now (the tx we were scanning for has been processed).
+    * This block was fetched because its cfilter matched. Removing it from
+    * the pending set may unblock the resume watermark (peergroup_pending_
+    * blocks gates how far peergroup_advance_lastblk may advance -- see
+    * there), so recompute it now. If --stop-after-height was requested and
+    * this was the last in-flight block, stop now (the tx we were scanning
+    * for has been processed).
     */
    peergroup_remove_pending_block(&blockHash);
+   peergroup_advance_lastblk();
    if (pg->cfStopRequested && pg->cfBlocksPending == 0) {
       log_warn(LGPFX" BIP157: matched blocks drained; stopping.\n");
       peergroup_download_complete();
@@ -1503,22 +1914,7 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
       return 0;
    }
 
-   /*
-    * If we're in UPDATE_TXDB and have caught up to the tip, we're done.
-    */
-   if (btc->state == BITC_STATE_UPDATE_TXDB) {
-      uint256 best_hash;
-      blockstore_get_best_hash(bs, &best_hash);
-      peergroup_get_lastblk(pg, &lastTxdb);
-      if (uint256_issame(&lastTxdb, &best_hash)) {
-         peergroup_download_complete();
-         return 0;
-      }
-      /* Request more cfilters if the batch is drained. */
-      if (pg->cfScanHeight <= pg->cfTipHeight) {
-         return peergroup_request_cfilters(peer);
-      }
-   }
+   peergroup_maybe_complete();
 
    return 0;
 }
@@ -1896,7 +2292,8 @@ peergroup_periodic_cb(void *clientData)
  * peergroup_pending_blocks_cb --
  *
  *      Runs much more often than peergroup_periodic_cb so an unresponsive
- *      peer for a matched-block fetch is retried within SYNC_STALL_USEC of
+ *      peer for a matched-block fetch -- or a peer that has stalled on its
+ *      assigned cfilter scan chunk -- is retried within SYNC_STALL_USEC of
  *      the request, not within the (much coarser) 15s general refill tick.
  *
  *-------------------------------------------------------------------------
@@ -1908,6 +2305,7 @@ peergroup_pending_blocks_cb(void *clientData)
       return;
    }
    peergroup_check_pending_blocks();
+   peergroup_check_pending_chunks();
 }
 
 
@@ -1938,10 +2336,12 @@ peergroup_init(struct config *config,
    pg->startTS       = time_get();
    pg->maxActive     = maxPeers;
    pg->minActiveInit = minPeersInit;
-   pg->cfScanHeight = -1;
+   pg->cfScanFloor   = -1;
    pg->cfTipHeight   = -1;
-   pg->cfVerified     = 0;
-   pg->cfBatchRemaining = 0;
+   pg->cfVerified    = 0;
+   pg->cfSeg         = NULL;
+   pg->cfSegCount    = 0;
+   pg->cfDoneContig  = 0;
    pg->cfhdrStartHeight = -1;
    pg->cfhdrTipHeight   = -1;
    uint256_zero_out(&pg->cfhdrPrevHeader);
@@ -1951,7 +2351,6 @@ peergroup_init(struct config *config,
    pg->cfcheckptAgreed   = 0;
    pg->cfcheckptVerified = 0;
    pg->cfhdrSyncStarted  = 0;
-   pg->cfDriverGone      = 0;
 
    /*
     * Open the compact-filter header store.
@@ -1959,6 +2358,7 @@ peergroup_init(struct config *config,
    {
       char *dir = bitc_get_directory();
       char cfhdrPath[PATH_MAX];
+
       snprintf(cfhdrPath, sizeof cfhdrPath, "%s/cfheaders.dat", dir);
       res = cfheaderstore_init(cfhdrPath, &pg->cfStore);
       if (res) {
@@ -2224,6 +2624,8 @@ peergroup_exit(struct peergroup *pg)
    pg->cfcheckptExpected = NULL;
    free(pg->cfPending);
    pg->cfPending = NULL;
+   free(pg->cfSeg);
+   pg->cfSeg = NULL;
    peergroup_print_stats(pg);
    peergroup_destroy_peers();
    free(btc->peerGroup);

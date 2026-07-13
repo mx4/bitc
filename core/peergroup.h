@@ -14,8 +14,31 @@ struct buff;
  */
 struct cf_pending_block {
    uint256   hash;
+   int       height;          /* block height (for resume-watermark gating) */
    struct peer *requestedFrom;
    mtime_t   requestTS;
+};
+
+/*
+ * One unit of parallel cfilter-scan work: a fixed [startHeight, endHeight]
+ * range of at most CFILTER_BATCH heights. The full scan range is carved into
+ * cfSegCount of these up front (see peergroup_download_filtered_blocks), so
+ * cfSeg[k] always covers a fixed, deterministic height range -- there is no
+ * need to search for "the segment covering height H": it's cfSeg[(H -
+ * cfScanFloor) / CFILTER_BATCH].
+ */
+struct cf_segment {
+   int          startHeight;   /* inclusive */
+   int          endHeight;     /* inclusive */
+   int          remaining;     /* outstanding cfilter responses for this chunk */
+   struct peer *assignedPeer;  /* NULL == idle/requeued, awaiting (re)assignment */
+   struct peer *avoidPeer;     /* peer that just stalled/lost this chunk; do not
+                                 * immediately hand it straight back to them */
+   mtime_t      progressTS;    /* time of last progress; used for stall detection */
+   mtime_t      assignedTS;    /* time this (re)assignment was made; used to
+                                 * measure the assigned peer's true per-chunk
+                                 * completion time for peerstats speed scoring */
+   bool         done;          /* remaining reached 0 and every cfilter verified */
 };
 
 struct peergroup {
@@ -52,36 +75,43 @@ struct peergroup {
    /*
     * BIP157 compact-filter sync state. When useBip37 is false (the default),
     * the client syncs cfheaders then cfilters instead of sending filterload +
-    * merkleblock. The cfilter scan walks from cfScanHeight upward; each
-    * cfilter is GCS-matched against the wallet's scriptPubKeys, and matching
-    * blocks are fetched via getdata(MSG_BLOCK).
+    * merkleblock. Each cfilter is GCS-matched against the wallet's
+    * scriptPubKeys, and matching blocks are fetched via getdata(MSG_BLOCK).
+    *
+    * The cfilter scan itself is parallel: [cfScanFloor, cfTipHeight] is
+    * carved up front into cfSegCount fixed-size chunks (cfSeg[]), and
+    * multiple NODE_COMPACT_FILTERS peers each stream a different chunk
+    * concurrently (see peergroup_schedule_cfilters). cfheader sync and
+    * cfcheckpt verification remain single-driver (downloadPeer), since the
+    * cfheader hash chain has a genuine sequential dependency.
     */
    struct cfheaderstore *cfStore;
-   int                   cfScanHeight;     /* next height to request cfilters for */
-   int                   cfTipHeight;      /* height of the last cfilter we requested */
-   int                   cfVerified;       /* number of cfilters verified so far */
+
+   int                   cfScanFloor;      /* first height of the cfilter scan (fixed) */
+   int                   cfTipHeight;      /* last height of the cfilter scan (fixed) */
+   int                   cfVerified;       /* number of cfilters verified so far (progress) */
    int                   cfBlocksPending;   /* matched full blocks awaited */
    bool                  cfStopRequested;   /* --stop-after-height reached */
 
    /*
-    * A single getcfilters(startHeight, stopHash) request causes the peer to
-    * stream back one 'cfilter' message per height in [startHeight, stopHash's
-    * height] -- NOT one combined response. cfBatchRemaining tracks how many
-    * of those individual responses are still outstanding for the batch most
-    * recently requested; the next getcfilters batch must only be requested
-    * once this reaches 0, not after every single cfilter received (doing the
-    * latter multiplies outstanding requests by up to CFILTER_BATCH and
-    * rapidly desyncs cfScanHeight far ahead of what has actually been
-    * verified).
+    * cfSeg[k] covers heights [cfScanFloor + k*CFILTER_BATCH, ...]; see
+    * struct cf_segment. cfDoneContig is the number of leading chunks (from
+    * index 0) that are fully verified, i.e. every height in
+    * [cfScanFloor, cfSeg[cfDoneContig-1].endHeight] has been verified. This
+    * is the "contiguous watermark" used to advance the crash-safe resume
+    * pointer even though chunks can complete out of order.
     */
-   int                   cfBatchRemaining;
+   struct cf_segment    *cfSeg;
+   int                   cfSegCount;
+   int                   cfDoneContig;
 
    /*
     * Pending matched-block fetches (getdata(MSG_BLOCK) sent, response not
     * yet received). Tracked with a timestamp so a silently unresponsive peer
     * (common for NODE_NETWORK_LIMITED nodes asked for an old block, which
     * often don't even bother sending 'notfound') can be retried against a
-    * different peer instead of hanging forever.
+    * different peer instead of hanging forever. Also used to gate how far
+    * the resume watermark may advance (never past an unprocessed match).
     */
    struct cf_pending_block *cfPending;      /* dynamic array, cfBlocksPending long */
    int                      cfPendingCap;   /* allocated capacity of cfPending */
@@ -101,7 +131,6 @@ struct peergroup {
    int                   cfcheckptAgreed;    /* number of peers that agreed */
    bool                  cfcheckptVerified;  /* true once at least one peer agreed */
    bool                  cfhdrSyncStarted;   /* true once getcfheaders has been sent */
-   bool                  cfDriverGone;       /* set when the cfilter batch driver disconnects mid-stream */
 };
 
 
@@ -118,6 +147,7 @@ void peergroup_notify_destroy(void);
 void peergroup_dequeue_peerlist(const struct circlist_item *li);
 void peergroup_queue_peerlist(struct circlist_item *li);
 void peergroup_notify_peer_gone(struct peer *peer);
+void peergroup_requeue_peer_chunks(struct peer *peer);
 
 int peergroup_handle_handshake_ok(struct peer *peer, int peerStartingHeight);
 int peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf);
