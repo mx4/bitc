@@ -10,6 +10,7 @@ jobs:
   build:
 
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
 
@@ -25,7 +26,7 @@ jobs:
         libssl-dev libncurses-dev libcjson-dev
     - name: install packages (macOS)
       if: runner.os == 'macOS'
-      run: brew install pkg-config openssl leveldb snappy libcurl ncurses cjson
+      run: brew install pkg-config openssl leveldb snappy curl ncurses cjson
     - name: build (debug)
       run: make
     - name: test (fuzz + gcs)

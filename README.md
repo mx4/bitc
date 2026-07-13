@@ -72,7 +72,7 @@ finally build and launch:
 
 Install the dependencies via `brew` (or `port`):
 ```
-   # brew install pkg-config openssl leveldb snappy libcurl ncurses cjson
+   # brew install pkg-config openssl leveldb snappy curl ncurses cjson
 ```
 then build and launch:
 ```
