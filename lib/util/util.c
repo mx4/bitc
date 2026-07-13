@@ -834,10 +834,10 @@ print_latency(mtime_t latency)
       uint64 hour = latency / ONE_HOUR;
       return safe_asprintf("%" PRIu64 " hour%s %" PRIu64 " min",
                            hour, hour > 1 ? "s" : "",
-                           (latency % ONE_HOUR) / ONE_MIN);
+                           (uint64)((latency % ONE_HOUR) / ONE_MIN));
    } else if (latency > ONE_MIN) {
       return safe_asprintf("%" PRIu64 " min %.1f sec",
-                            latency / ONE_MIN,
+                            (uint64)(latency / ONE_MIN),
                            (latency % ONE_MIN) / (ONE_SEC * 1.0));
    } else if (latency > ONE_SEC) {
       return safe_asprintf("%.1f sec", latency / (ONE_SEC * 1.0));
