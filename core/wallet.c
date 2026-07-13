@@ -49,6 +49,19 @@ struct wallet {
    struct secure_area     *pass;
    struct crypt_key       *ckey;
    struct secure_area     *ckey_store;
+
+   /*
+    * Cache for wallet_get_filter_scripts(): the BIP158 cfilter scan calls
+    * this once per filter (hundreds/sec during a parallel scan), and
+    * rebuilding + malloc'ing a fresh scriptPubKey array every single time
+    * was a real, measurable CPU cost at that rate. Invalidated (freed and
+    * rebuilt on the next call) whenever a key is added -- see the
+    * hashtable_insert(wallet->hash_keys, ...) call site.
+    */
+   uint8                 **filterScripts;
+   size_t                 *filterScriptLens;
+   size_t                  filterScriptCount;
+   bool                    filterScriptsValid;
 };
 
 
@@ -56,6 +69,10 @@ struct wallet_find_data {
    struct wallet_key *wkey;
    uint32             cfg_idx;
 };
+
+/* Forward declaration: used by the key-insertion path, defined near the
+ * other wallet_get_filter_scripts machinery further down this file. */
+static void wallet_invalidate_filter_scripts(struct wallet *wallet);
 
 
 /*
@@ -337,6 +354,8 @@ wallet_alloc_key(struct wallet *wallet,
 
    s = hashtable_insert(wallet->hash_keys, &pub_key, sizeof pub_key, wkey);
    ASSERT(s);
+
+   wallet_invalidate_filter_scripts(wallet);
 
    return 1;
 }
@@ -1118,6 +1137,7 @@ wallet_close(struct wallet *wallet)
    txdb_close(wallet->txdb);
    hashtable_clear_with_callback(wallet->hash_keys, wallet_free_key_cb);
    hashtable_destroy(wallet->hash_keys);
+   wallet_invalidate_filter_scripts(wallet);
    free(wallet->filename);
    secure_free(wallet->ckey_store);
    memset(wallet, 0, sizeof *wallet);
@@ -1265,31 +1285,66 @@ wallet_get_filter_scripts_cb(const void *key,
 /*
  *------------------------------------------------------------------------
  *
+ * wallet_invalidate_filter_scripts --
+ *
+ *      Free the wallet_get_filter_scripts cache, if any. Called whenever a
+ *      key is added to the wallet, so the next cfilter match sees it.
+ *
+ *------------------------------------------------------------------------
+ */
+static void
+wallet_invalidate_filter_scripts(struct wallet *wallet)
+{
+   size_t i;
+
+   for (i = 0; i < wallet->filterScriptCount; i++) {
+      free(wallet->filterScripts[i]);
+   }
+   free(wallet->filterScripts);
+   free(wallet->filterScriptLens);
+   wallet->filterScripts      = NULL;
+   wallet->filterScriptLens   = NULL;
+   wallet->filterScriptCount  = 0;
+   wallet->filterScriptsValid = 0;
+}
+
+
+/*
+ *------------------------------------------------------------------------
+ *
  * wallet_get_filter_scripts --
+ *
+ *      Returns the wallet's scriptPubKeys to GCS-match cfilters against.
+ *      Cached: the returned pointers are OWNED BY THE WALLET, remain valid
+ *      until the next call that rebuilds the cache (key added) or
+ *      wallet_close(), and must NOT be freed by the caller.
  *
  *------------------------------------------------------------------------
  */
 void
-wallet_get_filter_scripts(const struct wallet *wallet,
+wallet_get_filter_scripts(struct wallet *wallet,
                            uint8 ***scripts,
                            size_t **lens,
                            size_t *count)
 {
-   struct filter_scripts_ctx ctx = { 0 };
-
    ASSERT(scripts);
    ASSERT(lens);
    ASSERT(count);
 
-   *scripts = NULL;
-   *lens    = NULL;
-   *count   = 0;
+   if (!wallet->filterScriptsValid) {
+      struct filter_scripts_ctx ctx = { 0 };
 
-   hashtable_for_each(wallet->hash_keys, wallet_get_filter_scripts_cb, &ctx);
+      hashtable_for_each(wallet->hash_keys, wallet_get_filter_scripts_cb, &ctx);
 
-   *scripts = ctx.scripts;
-   *lens    = ctx.lens;
-   *count   = ctx.count;
+      wallet->filterScripts      = ctx.scripts;
+      wallet->filterScriptLens   = ctx.lens;
+      wallet->filterScriptCount  = ctx.count;
+      wallet->filterScriptsValid = 1;
 
-   log_info(LGPFX" emitted %zu filter scripts for BIP158 matching.\n", ctx.count);
+      log_info(LGPFX" built %zu filter scripts for BIP158 matching.\n", ctx.count);
+   }
+
+   *scripts = wallet->filterScripts;
+   *lens    = wallet->filterScriptLens;
+   *count   = wallet->filterScriptCount;
 }

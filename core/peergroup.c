@@ -541,28 +541,18 @@ peergroup_handle_cfilter(struct peer *peer, const btc_msg_cfilter *cf)
    }
 
    /*
-    * GCS-match the filter against the wallet's scriptPubKeys.
+    * GCS-match the filter against the wallet's scriptPubKeys. The returned
+    * arrays are cached inside the wallet and owned by it (rebuilt only when
+    * a key is added) -- do not free them here; see wallet_get_filter_scripts.
     */
    wallet_get_filter_scripts(btc->wallet, &scripts, &scriptLens, &numScripts);
    if (numScripts == 0) {
-      log_info(LGPFX" BIP157: no wallet scripts to match; skipping cfilter at height %d.\n",
-          blockHeight);
       match = 0;
    } else {
       match = gcs_filter_match_any(cf->filterData, cf->numBytes,
                                    &blockHash,
                                    (const uint8 * const *)scripts,
                                    scriptLens, numScripts);
-
-      /* Free the scripts. */
-      {
-         size_t i;
-         for (i = 0; i < numScripts; i++) {
-            free(scripts[i]);
-         }
-         free(scripts);
-         free(scriptLens);
-      }
    }
 
    if (match) {

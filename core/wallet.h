@@ -43,9 +43,15 @@ int wallet_encrypt(struct wallet *wallet, struct secure_area *pass);
  * For each wallet key, emits the P2PKH script:
  *   OP_DUP OP_HASH160 <20 bytes> OP_EQUALVERIFY OP_CHECKSIG  (25 bytes)
  *
- * Caller frees *scripts and each (*scripts)[i], and *lens.
+ * Cached inside the wallet (rebuilt when a key is added): the returned
+ * *scripts / *lens are OWNED BY THE WALLET and remain valid until the next
+ * call that rebuilds the cache or wallet_close(). The caller must NOT free
+ * them -- this is a change from the previous caller-frees contract, made
+ * because this is called once per filter (hundreds/sec during a parallel
+ * cfilter scan) and rebuilding+freeing a fresh copy every time was a real
+ * CPU cost at that rate.
  */
-void wallet_get_filter_scripts(const struct wallet *wallet,
+void wallet_get_filter_scripts(struct wallet *wallet,
                                uint8 ***scripts, size_t **lens,
                                size_t *count);
 
