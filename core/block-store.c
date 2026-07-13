@@ -781,7 +781,6 @@ blockset_open_file(struct blockstore *blockStore,
 
       if (btc->stop != 0) {
          res = 1;
-         NOT_TESTED();
          break;
       }
 

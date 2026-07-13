@@ -641,7 +641,7 @@ ncui_contacts_update(void)
       char *label = config_getstring(btc->contactsCfg, NULL, "contact%u.label", i);
 
       if (addr == NULL || label == NULL) {
-         NOT_TESTED(); // XXX: leak.
+
          continue;
       }
 
@@ -1097,7 +1097,6 @@ here:
       bitc_req_stop();
       break;
    case KEY_RESIZE:
-      NOT_TESTED_ONCE();
       ncui_redraw();
       break;
    case 20: // CTRL-T
@@ -1906,10 +1905,8 @@ ncui_input_kbd_cb(struct ncui *ncui,
 {
    if (strcmp(cmd, ":q") == 0 ||
        strcmp(cmd, ":q!") == 0) {
-      NOT_TESTED();
       bitc_req_stop();
    } else if (strncmp(cmd, ":p ", 3) == 0) {
-      NOT_TESTED();
       bitcui_set_status("hash: %s", cmd + 3);
    } else if (strcmp(cmd, "testform") == 0) {
       ncui_tx_form_create(ncui);

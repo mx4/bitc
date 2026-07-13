@@ -350,12 +350,10 @@ btcmsg_parse_notfound(struct buff *buf,
 
    res = deserialize_varint(buf, &n);
    if (res) {
-      NOT_TESTED();
       return res;
    }
 
    if (n > BTC_MSG_NOTFOUND_MAX_ENTRIES) {
-      NOT_TESTED();
       return 1;
    }
 
@@ -429,7 +427,6 @@ btcmsg_parse_alert(struct buff *buf)
     * 1. verify signature.
     * 2. deserialize struct BTCMsgAlert.
     */
-   NOT_TESTED();
 
 exit:
    free(payload);
@@ -487,12 +484,10 @@ btcmsg_parse_headers(struct buff       *buf,
 
    res = deserialize_varint(buf, &n);
    if (res) {
-      NOT_TESTED();
       return res;
    }
 
    if (n > BTC_MSG_GETHEADERS_MAX_ENTRIES) {
-      NOT_TESTED();
       return 1;
    }
 
@@ -1112,12 +1107,10 @@ btcmsg_parse_inv(struct buff  *buf,
 
    res = deserialize_varint(buf, &n);
    if (res) {
-      NOT_TESTED();
       return res;
    }
 
    if (n > BTC_MSG_INV_MAX_ENTRIES) {
-      NOT_TESTED();
       return 1;
    }
 
@@ -1132,7 +1125,6 @@ btcmsg_parse_inv(struct buff  *buf,
    }
    if (res) {
       free(inv);
-      NOT_TESTED();
       return res;
    }
 

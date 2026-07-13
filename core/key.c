@@ -376,19 +376,16 @@ key_sign(struct key *k,
 
    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, k->pkey, NULL);
    if (ctx == NULL || EVP_PKEY_sign_init(ctx) != 1) {
-      NOT_TESTED();
       EVP_PKEY_CTX_free(ctx);
       return 0;
    }
 
    if (EVP_PKEY_sign(ctx, NULL, &len, data, datalen) != 1) {
-      NOT_TESTED();
       EVP_PKEY_CTX_free(ctx);
       return 0;
    }
    sig0 = safe_calloc(1, len);
    if (EVP_PKEY_sign(ctx, sig0, &len, data, datalen) != 1) {
-      NOT_TESTED();
       free(sig0);
       EVP_PKEY_CTX_free(ctx);
       return 0;

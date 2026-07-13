@@ -821,7 +821,6 @@ wallet_open_file(struct config      *config,
       res = config_load(wallet->filename, &wcfg);
       if (res) {
          *errStr = "failed to read wallet file";
-         NOT_TESTED();
          goto exit;
       }
    }

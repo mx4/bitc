@@ -93,18 +93,15 @@ base58_decode(const char *str,
             buf++;
          }
          if (*buf != '\0') {
-            NOT_TESTED();
             goto err;
          }
          break;
       }
       BN_set_word(bnc, p - base58Chars);
       if (!BN_mul(bn, bn, bn58, ctx)) {
-         NOT_TESTED();
          goto err;
       }
       if (!BN_add(bn, bn, bnc)) {
-         NOT_TESTED();
          goto err;
       }
    }

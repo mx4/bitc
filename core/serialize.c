@@ -330,7 +330,6 @@ deserialize_str(struct buff *buf,
    }
 
    if (len >= size) {
-      NOT_TESTED();
       return 1;
    }
    str[size - 1] = '\0';

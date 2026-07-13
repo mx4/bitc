@@ -517,7 +517,6 @@ script_match_type(struct buff            *buf,
 
    script = script_parse(buf);
    if (script == NULL) {
-      NOT_TESTED();
       return 1;
    }
 
@@ -613,7 +612,6 @@ script_sign(struct wallet               *wallet,
 
    res = script_match_type(&scriptPubKey, &type, &data_addr, &data_len);
    if (res) {
-      NOT_TESTED();
       goto exit;
    }
 
@@ -629,13 +627,11 @@ script_sign(struct wallet               *wallet,
 
       res = script_sign_hash(wallet, keyHash, &hash, hashType, scriptSig);
       if (res) {
-         NOT_TESTED();
          goto exit;
       }
 
       res = script_push_pubkey(wallet, keyHash, scriptSig);
       if (res) {
-         NOT_TESTED();
          goto exit;
       }
       break;
@@ -682,14 +678,12 @@ script_parse_pubkey_hash(const uint8 *scriptPubKey,
 
    res = script_match_type(&buf, &type, &data, &datalen);
    if (res) {
-      NOT_TESTED();
       return 1;
    }
 
    switch (type) {
    case TX_PUBKEY:
       log_warn(LGPFX" script TX_PUBKEY\n");
-      NOT_TESTED();
       hash160_calc(data, datalen, pubkey);
       break;
    case TX_PUBKEYHASH:
@@ -697,7 +691,6 @@ script_parse_pubkey_hash(const uint8 *scriptPubKey,
       memcpy(pubkey, data, sizeof(uint160));
       break;
    default:
-      NOT_TESTED();
       res = 1;
       break;
    }

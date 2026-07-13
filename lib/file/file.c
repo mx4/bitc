@@ -104,7 +104,6 @@ file_glob(const char *path,
 
    res = glob(s, 0, NULL, &g);
 #ifndef GLOB_NOMATCH
-   NOT_TESTED();
    if (res == GLOB_ABEND) {
 #else
    if (res == GLOB_NOMATCH) {
@@ -359,7 +358,6 @@ file_rotate(const char *filename,
          res = file_rename(file0, file1);
       }
       if (res != 0) {
-         NOT_TESTED();
          return res;
       }
    }
@@ -724,7 +722,6 @@ file_getname(const char *path)
    f = strrchr(path, '/');
 
    if (f == NULL) {
-      NOT_TESTED();
       return safe_strdup(path);
    } else {
       return safe_strdup(f + 1);

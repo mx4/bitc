@@ -66,20 +66,8 @@ void condvar_signal(struct condvar *cv);
 void condvar_free(struct condvar *cv);
 
 /*
- * Log, ASSERTs and NOT_TESTED.
+ * ASSERTs.
  */
-
-#define NOT_TESTED() \
-     log_warn("NOT_TESTED -- %s:%s:%u\n", __FILE__, __func__, __LINE__)
-
-#define NOT_TESTED_ONCE()       \
-      do {                      \
-         static bool _done;     \
-         if (!_done) {          \
-            _done = 1;          \
-            NOT_TESTED();       \
-         }                      \
-      } while (0)
 
 #define DOLOG(_lvl)  (verbose >= _lvl)
 

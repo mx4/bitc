@@ -403,13 +403,11 @@ bitcui_notify_init(int *readFd,
 
    flags = fcntl(*readFd, F_GETFL, 0);
    if (flags < 0) {
-      NOT_TESTED();
       return flags;
    }
 
    res = fcntl(*readFd, F_SETFL, flags | O_NONBLOCK);
    if (res < 0) {
-      NOT_TESTED();
       return res;
    }
    poll_callback_device(btcui->poll, btcui->eventFd, 1, 0, 1,

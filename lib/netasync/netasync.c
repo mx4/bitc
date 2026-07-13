@@ -1080,14 +1080,12 @@ netasync_send_ctx(struct netasync_socket   *sock,
    static int count;
    count++;
    if ((count % 37) == 0) {
-      NOT_TESTED_ONCE();
       res = 0;
       goto next;
    }
 
    res = write(sock->fd, ctx->buf, ctx->len);
    if (res == -1 && errno == EAGAIN) {
-      NOT_TESTED_ONCE();
       res = 0;
    }
 next:

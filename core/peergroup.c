@@ -2167,7 +2167,6 @@ peergroup_refill(bool init)
       numTried++;
       paddr = addrbook_get_rand_addr(btc->book);
       if (paddr == NULL) {
-         NOT_TESTED();
          return;
       }
 

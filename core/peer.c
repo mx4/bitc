@@ -134,7 +134,6 @@ peer_send_cb(struct netasync_socket *sock,
    ASSERT(peer->magic == PEER_MAGIC);
 
    if (err != 0) {
-      NOT_TESTED();
       log_warn(LGPFX" %s: failed to send: %s (%d)\n",
               peer->name, strerror(err), err);
    }
@@ -226,7 +225,6 @@ peer_send_getblocks(struct peer *peer)
    res = btcmsg_craft_getblocks(hashes, num, &peer->sendBuf);
    free(hashes);
    if (res) {
-      NOT_TESTED();
       return res;
    }
 
@@ -263,7 +261,6 @@ peer_send_getheaders(struct peer *peer)
                                  &peer->sendBuf);
    free(hashes);
    if (res) {
-      NOT_TESTED();
       return res;
    }
 
@@ -762,7 +759,6 @@ peer_handle_getdata(struct peer *peer)
          break;
       case INV_TYPE_MSG_BLOCK:
       default:
-         NOT_TESTED();
          res = 1;
          goto exit;
       }
@@ -785,7 +781,6 @@ exit:
 static int
 peer_handle_getblocks(struct peer *peer)
 {
-   NOT_TESTED_ONCE();
 
    return 1;
 }
@@ -862,7 +857,6 @@ peer_handle_headers(struct peer *peer)
 
    res = btcmsg_parse_headers(&peer->recvBuf, &headers, &n);
    if (res) {
-      NOT_TESTED();
       return res;
    }
 
@@ -1111,7 +1105,6 @@ static int
 peer_handle_verack(struct peer *peer)
 {
    if (peer->got_version == 0) {
-      NOT_TESTED();
       return 1;
    }
    peer->got_verack = 1;

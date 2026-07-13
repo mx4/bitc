@@ -690,7 +690,6 @@ txdb_remove_from_hashtable(struct txdb      *txdb,
 
    txe = txdb_get_tx_entry(txdb, txHash);
    if (txe == NULL || txe->relevant == 1) {
-      NOT_TESTED();
       return;
    }
 
@@ -1020,7 +1019,6 @@ txdb_confirm_one_tx(struct txdb   *txdb,
 
    if (txe->relevant == 0) {
       txdb_remove_from_hashtable(txdb, txHash);
-      NOT_TESTED();
       return;
    }
 
@@ -1041,7 +1039,6 @@ txdb_confirm_one_tx(struct txdb   *txdb,
    uint256_snprintf_reverse(txHashStr, sizeof txHashStr, txHash);
    log_warn(LGPFX" %s confirmed in %s\n", txHashStr, bkHashStr);
 
-   NOT_TESTED();
 
    iter = leveldb_create_iterator(txdb->db, txdb->rd_opts);
    leveldb_iter_seek_to_first(iter);
@@ -1065,7 +1062,6 @@ txdb_confirm_one_tx(struct txdb   *txdb,
          continue;
       }
 
-      NOT_TESTED();
 
       val = leveldb_iter_value(iter, &vlen);
       txdata = txdb_deserialize_tx_data(val, vlen);
@@ -1125,7 +1121,6 @@ txdb_remember_tx(struct txdb   *txdb,
     */
    res = txdb_add_to_hashtable(txdb, buf, len, txHash, blkHash, ts, &txe);
    if (res) {
-      NOT_TESTED();
       return res;
    }
 
@@ -1401,7 +1396,6 @@ txdb_select_coins(struct txdb              *txdb,
          continue;
       }
       if (uint256_iszero(&txo_ent->blkHash)) {
-         NOT_TESTED();
          continue;
       }
 

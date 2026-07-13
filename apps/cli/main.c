@@ -964,13 +964,11 @@ bitc_req_init(void)
 
    flags = fcntl(btc->eventFd, F_GETFL, 0);
    if (flags < 0) {
-      NOT_TESTED();
       return flags;
    }
 
    res = fcntl(btc->eventFd, F_SETFL, flags | O_NONBLOCK);
    if (res < 0) {
-      NOT_TESTED();
       return res;
    }
    poll_callback_device(btc->poll, btc->eventFd, 1, 0, 1, bitc_req_cb, NULL);
