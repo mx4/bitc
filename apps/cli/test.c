@@ -32,7 +32,6 @@ static void
 bitc_test_one_tx(struct btc_tx_desc *desc)
 {
    struct btc_msg_tx tx;
-   char hashStr[80];
    uint256 hash;
    struct buff *buf;
    int res;
@@ -59,8 +58,7 @@ bitc_test_one_tx(struct btc_tx_desc *desc)
 
    hash256_calc(buff_base(buf), buff_curlen(buf), &hash);
 
-   uint256_snprintf_reverse(hashStr, sizeof hashStr, &hash);
-   log_info("TX: %s\n", hashStr);
+   log_info("TX: %s\n", uint256_to_str(&hash));
 
    ASSERT(res == 0);
    buff_free(buf);
@@ -168,7 +166,7 @@ bitc_crypt_test(void)
    s = crypt_set_key_from_passphrase(pass, &k, &count);
    ASSERT(s);
 
-   printf("num_iterations = %lld\n", count);
+   printf("num_iterations = %lld\n", (long long)count);
 
    s = crypt_encrypt(&k, sec, &cipher, &clen);
    ASSERT(s);
