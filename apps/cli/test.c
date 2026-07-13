@@ -166,7 +166,7 @@ bitc_crypt_test(void)
    s = crypt_set_key_from_passphrase(pass, &k, &count);
    ASSERT(s);
 
-   printf("num_iterations = %lld\n", (long long)count);
+   printf("num_iterations = %" PRId64 "\n", (int64)count);
 
    s = crypt_encrypt(&k, sec, &cipher, &clen);
    ASSERT(s);

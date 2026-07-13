@@ -107,7 +107,7 @@ crypt_determine_count(const struct secure_area *pass,
       loop--;
    }
 
-   log_info(LGPFX" %s: result= %llu\n", __func__, count);
+   log_info(LGPFX" %s: result= %" PRIu64 "\n", __func__, count);
 
    return MAX(CRYPT_NUM_ITERATIONS_MIN, count);
 }

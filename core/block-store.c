@@ -757,8 +757,8 @@ blockset_open_file(struct blockstore *blockStore,
    if (bs->filesize > 0) {
       char *s = print_size(bs->filesize);
       char *name = file_getname(bs->filename);
-      log_info(LGPFX" reading file %s -- %s -- %llu headers.\n",
-          name, s, (unsigned long long)(bs->filesize / sizeof(btc_block_header)));
+      log_info(LGPFX" reading file %s -- %s -- %" PRIu64 " headers.\n",
+          name, s, (uint64)(bs->filesize / sizeof(btc_block_header)));
       free(name);
       free(s);
    }
@@ -801,8 +801,8 @@ blockset_open_file(struct blockstore *blockStore,
          blockstore_add_entry(blockStore, be, &hash);
 
          if (i == numHeaders - 1) {
-            bitcui_set_status("loading headers .. %llu%%",
-                           (unsigned long long)((offset + numBytes) * 100 / bs->filesize));
+            bitcui_set_status("loading headers .. %" PRIu64 "%%",
+                           (uint64)((offset + numBytes) * 100 / bs->filesize));
          }
          if (i == numHeaders - 1 ||
              (numBytes < sizeof buf && i > numHeaders - 256)) {
@@ -1037,7 +1037,7 @@ blockstore_get_hash_from_birth(const struct blockstore *bs,
 
          hash256_calc(&e->header, sizeof e->header, hash);
          s = print_time_local(birth, "%c");
-         log_info(LGPFX" birth %llu (%s) --> block %s.\n", (unsigned long long)ts, s, uint256_to_str(hash));
+         log_info(LGPFX" birth %" PRIu64 " (%s) --> block %s.\n", (uint64)ts, s, uint256_to_str(hash));
          free(s);
          return;
       }
@@ -1047,8 +1047,8 @@ blockstore_get_hash_from_birth(const struct blockstore *bs,
     * headers.dat, or a birth older than the oldest stored header). Start the
     * scan from genesis rather than crashing.
     */
-   log_info(LGPFX" birth %llu predates stored headers; starting from genesis.\n",
-       (unsigned long long)birth);
+   log_info(LGPFX" birth %" PRIu64 " predates stored headers; starting from genesis.\n",
+       (uint64)birth);
    memcpy(hash, &bs->genesis_hash, sizeof *hash);
 }
 

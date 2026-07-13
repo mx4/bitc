@@ -821,22 +821,22 @@ print_latency(mtime_t latency)
    if (latency > ONE_YEAR) {
       uint64 year =  latency / ONE_YEAR;
       uint64 day  = (latency % ONE_YEAR) / ONE_DAY;
-      return safe_asprintf("%llu year%s %llu day%s",
+      return safe_asprintf("%" PRIu64 " year%s %" PRIu64 " day%s",
                            year, year > 1 ? "s" : "",
                            day,  day  > 1 ? "s" : "");
    } else if (latency > ONE_DAY) {
       uint64 day  =  latency / ONE_DAY;
       uint64 hour = (latency % ONE_DAY) / ONE_HOUR;
-      return safe_asprintf("%llu day%s %llu hour%s",
+      return safe_asprintf("%" PRIu64 " day%s %" PRIu64 " hour%s",
                            day,  day  > 1 ? "s" : "",
                            hour, hour > 1 ? "s" : "");
    } else if (latency > ONE_HOUR) {
       uint64 hour = latency / ONE_HOUR;
-      return safe_asprintf("%llu hour%s %llu min",
+      return safe_asprintf("%" PRIu64 " hour%s %" PRIu64 " min",
                            hour, hour > 1 ? "s" : "",
                            (latency % ONE_HOUR) / ONE_MIN);
    } else if (latency > ONE_MIN) {
-      return safe_asprintf("%llu min %.1f sec",
+      return safe_asprintf("%" PRIu64 " min %.1f sec",
                             latency / ONE_MIN,
                            (latency % ONE_MIN) / (ONE_SEC * 1.0));
    } else if (latency > ONE_SEC) {
@@ -844,7 +844,7 @@ print_latency(mtime_t latency)
    } else if (latency > ONE_MSEC) {
       return safe_asprintf("%.1f msec", latency / (ONE_MSEC * 1.0));
    } else {
-      return safe_asprintf("%llu usec", latency);
+      return safe_asprintf("%" PRIu64 " usec", latency);
    }
 #undef ONE_MSEC
 #undef ONE_SEC
@@ -867,7 +867,7 @@ char *
 print_size(uint64 size)
 {
    if (size < 1024) {
-      return safe_asprintf("%llu bytes", size);
+      return safe_asprintf("%" PRIu64 " bytes", size);
    } else if (size < 1024 * 1024) {
       return safe_asprintf("%.1f KB", size / 1024.0);
    } else if (size < 1024 * 1024 * 1024) {
@@ -982,7 +982,7 @@ util_bumpcoresize(void)
       return;
    }
 
-   log_info(LGPFX" changing rlimit core-size: %llx -> %llx\n",
+   log_info(LGPFX" changing rlimit core-size: %" PRIx64 " -> %" PRIx64 "\n",
        (uint64)lim.rlim_cur, (uint64)lim.rlim_max);
    lim.rlim_cur = lim.rlim_max;
 
@@ -1016,7 +1016,7 @@ util_bumpnofds(void)
    if (lim.rlim_cur == lim.rlim_max) {
       return;
    }
-   log_info(LGPFX" changing rlimit max fds: %llu -> %llu\n",
+   log_info(LGPFX" changing rlimit max fds: %" PRIu64 " -> %" PRIu64 "\n",
        (uint64)lim.rlim_cur, (uint64)lim.rlim_max);
    if (lim.rlim_max > 100000) {
       lim.rlim_max = 10000;

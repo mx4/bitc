@@ -130,8 +130,8 @@ gcs_self_test(void)
 
    got = siphash_2_4(key, data, sizeof data);
    if (got != expected) {
-      log_warn(LGPFX" SipHash self-test FAILED: got 0x%llx, expected 0x%llx\n",
-              (unsigned long long)got, (unsigned long long)expected);
+      log_warn(LGPFX" SipHash self-test FAILED: got 0x%" PRIx64 ", expected 0x%" PRIx64 "\n",
+              (uint64)got, (uint64)expected);
       return 0;
    }
    log_info(LGPFX" SipHash self-test passed.\n");
@@ -328,8 +328,8 @@ gcs_filter_match_any(const uint8 *filterData, size_t filterLen,
       return 0;
    }
    if (N > 10000000) {
-      log_warn(LGPFX" filter N=%llu is unreasonably large; rejecting.\n",
-              (unsigned long long)N);
+      log_warn(LGPFX" filter N=%" PRIu64 " is unreasonably large; rejecting.\n",
+              (uint64)N);
       return 0;
    }
 

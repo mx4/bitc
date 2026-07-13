@@ -169,7 +169,7 @@ btcmsg_print_txout(const btc_msg_tx_out *txOut)
    }
 
    log_warn(LGPFX"    value        = %.8f BTC\n", txOut->value / ONE_BTC);
-   log_warn(LGPFX"    scriptLen    = %llu\n", txOut->scriptLength);
+   log_warn(LGPFX"    scriptLen    = %" PRIu64 "\n", txOut->scriptLength);
    log_warn(LGPFX"    scriptPubKey = %s\n", scriptStr);
    if (addr) {
       log_warn(LGPFX"    scriptPayee  = %s\n", addr);
@@ -198,7 +198,7 @@ btcmsg_print_txin(const btc_msg_tx_in *txIn)
 
    log_warn(LGPFX"    prevTxHash   = %s\n", prevStr);
    log_warn(LGPFX"    prevTxOutIdx = %u\n", txIn->prevTxOutIdx);
-   log_warn(LGPFX"    scriptLen    = %llu\n", txIn->scriptLength);
+   log_warn(LGPFX"    scriptLen    = %" PRIu64 "\n", txIn->scriptLength);
    log_warn(LGPFX"    scriptSig    = '%s'\n", scriptStr);
    log_warn(LGPFX"    sequence     = %#x\n", txIn->sequence);
 }
@@ -220,13 +220,13 @@ btcmsg_print_tx(const btc_msg_tx *tx)
    log_info("================================================================\n");
    log_warn(LGPFX"  version  = %u\n", tx->version);
    log_warn(LGPFX"  lockTime = %u\n", tx->lock_time);
-   log_warn(LGPFX"  inCount  = %llu\n", tx->in_count);
+   log_warn(LGPFX"  inCount  = %" PRIu64 "\n", tx->in_count);
 
    for (i = 0; i < tx->in_count; i++) {
       btcmsg_print_txin(tx->tx_in + i);
    }
 
-   log_warn(LGPFX"  outCount = %llu\n", tx->out_count);
+   log_warn(LGPFX"  outCount = %" PRIu64 "\n", tx->out_count);
 
    for (i = 0; i < tx->out_count; i++) {
       btcmsg_print_txout(tx->tx_out + i);
@@ -250,7 +250,7 @@ btcmsg_print_block(const btc_msg_block *blk)
 
    btcmsg_print_header(&blk->header);
 
-   log_warn(LGPFX" txCount = %llu\n", blk->txCount);
+   log_warn(LGPFX" txCount = %" PRIu64 "\n", blk->txCount);
 
    for (i = 0; i < blk->txCount; i++) {
       btcmsg_print_tx(blk->tx + i);
@@ -941,7 +941,7 @@ btcmsg_print_version(const char            *pfx,
 {
    char *s = print_time_utc(v->time);
 
-   log_info(LGPFX" %s: '%s' @%d -- '%s' -- height=%u --svc=%#llx\n",
+   log_info(LGPFX" %s: '%s' @%d -- '%s' -- height=%u --svc=%#" PRIx64 "\n",
        pfx, v->strVersion, v->version, s, v->startingHeight, v->services);
 
    free(s);
@@ -1360,8 +1360,8 @@ btcmsg_parse_cfilter(struct buff *buf, btc_msg_cfilter *cf)
       return 1;
    }
    if (cf->numBytes > 4000000) {
-      log_warn(LGPFX" cfilter numBytes=%llu exceeds cap.\n",
-              (unsigned long long)cf->numBytes);
+      log_warn(LGPFX" cfilter numBytes=%" PRIu64 " exceeds cap.\n",
+              (uint64)cf->numBytes);
       return 1;
    }
    cf->filterData = safe_malloc(cf->numBytes);
@@ -1391,8 +1391,8 @@ btcmsg_parse_cfheaders(struct buff *buf, btc_msg_cfheaders *cfh)
       return 1;
    }
    if (cfh->numHeaders > 2000) {
-      log_warn(LGPFX" cfheaders numHeaders=%llu exceeds cap.\n",
-              (unsigned long long)cfh->numHeaders);
+      log_warn(LGPFX" cfheaders numHeaders=%" PRIu64 " exceeds cap.\n",
+              (uint64)cfh->numHeaders);
       return 1;
    }
    cfh->filterHashes = safe_calloc(cfh->numHeaders, sizeof *cfh->filterHashes);
@@ -1423,8 +1423,8 @@ btcmsg_parse_cfcheckpt(struct buff *buf, btc_msg_cfcheckpt *cfc)
       return 1;
    }
    if (cfc->numHeaders > 100000) {
-      log_warn(LGPFX" cfcheckpt numHeaders=%llu exceeds cap.\n",
-              (unsigned long long)cfc->numHeaders);
+      log_warn(LGPFX" cfcheckpt numHeaders=%" PRIu64 " exceeds cap.\n",
+              (uint64)cfc->numHeaders);
       return 1;
    }
    cfc->filterHeaders = safe_calloc(cfc->numHeaders, sizeof *cfc->filterHeaders);

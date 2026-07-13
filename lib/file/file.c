@@ -411,7 +411,7 @@ file_pwrite(const struct file_descriptor *desc,
 
    if (res == -1) {
       int err = errno;
-      log_info(LGPFX" failed to pwrite %zu bytes from '%s' at off=%llu: %s (%d)\n",
+      log_info(LGPFX" failed to pwrite %zu bytes from '%s' at off=%" PRIu64 ": %s (%d)\n",
           len, desc->name, offset, strerror(err), err);
       return err;
    }
@@ -449,7 +449,7 @@ file_pread(const struct file_descriptor *desc,
 
    if (res == -1) {
       int err = errno;
-      log_info(LGPFX" failed to pread %zu bytes from '%s' at off=%llu: %s (%d)\n",
+      log_info(LGPFX" failed to pread %zu bytes from '%s' at off=%" PRIu64 ": %s (%d)\n",
           len, desc->name, offset, strerror(err), err);
       return err;
    }
@@ -657,7 +657,7 @@ file_truncate(const struct file_descriptor *desc,
 {
    int res;
 
-   log_info(LGPFX" truncating '%s' to size %llu\n", desc->name, offset);
+   log_info(LGPFX" truncating '%s' to size %" PRIu64 "\n", desc->name, offset);
 
    res = ftruncate(desc->fd, offset);
    if (res != 0) {

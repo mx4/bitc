@@ -454,7 +454,7 @@ script_tx_sighash(struct wallet           *wallet,
    memset(hash, 0, sizeof *hash);
    tx2 = btc_msg_tx_dup(tx);
 
-   log_info(LGPFX" Computing sighash for txi-%u/%llu\n", idx, tx2->in_count);
+   log_info(LGPFX" Computing sighash for txi-%u/%" PRIu64 "\n", idx, tx2->in_count);
 
    /*
     * Zero-out all the inputs' signatures.

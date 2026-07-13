@@ -163,7 +163,7 @@ netasync_exit(void)
    char *s1 = print_size(netasync.sent);
 
    if (netasync.sockets > 0) {
-      log_info(LGPFX" %u socks -- %llu / %s received -- %llu / %s sent.\n",
+      log_info(LGPFX" %u socks -- %" PRIu64 " / %s received -- %" PRIu64 " / %s sent.\n",
           netasync.sockets, netasync.received, s0, netasync.sent, s1);
    }
    free(s0);

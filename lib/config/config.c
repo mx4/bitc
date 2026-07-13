@@ -723,7 +723,7 @@ config_write(struct config *conf,
 
       switch (e->type) {
       case CONFIG_KV_INT64:
-         s = safe_asprintf("%s = \"%lld\"\n", e->key, e->val);
+         s = safe_asprintf("%s = \"%" PRId64 "\"\n", e->key, e->val);
          break;
       case CONFIG_KV_BOOL:
          s = safe_asprintf("%s = \"%s\"\n", e->key, e->trueOrFalse ? "TRUE" : "FALSE");

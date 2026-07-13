@@ -891,7 +891,7 @@ peer_handle_pong(struct peer *peer)
       return res;
    }
    if (nonce != peer->pingNonce - 1) {
-      log_info(LGPFX" %s: received ping nonce %#llx instead of %#llx.\n",
+      log_info(LGPFX" %s: received ping nonce %#" PRIx64 " instead of %#" PRIx64 ".\n",
           peer->name, nonce, peer->pingNonce - 1);
    }
    return 0;
@@ -1059,8 +1059,8 @@ peer_handle_version(struct peer *peer)
     * refusing the connection here.
     */
    if ((version.services & BTC_SERVICE_NODE_NETWORK) == 0) {
-      log_warn(LGPFX" %s: node does not serve full blocks (services=%#llx, %s).\n",
-              peer->name, (unsigned long long)version.services, peer->clientStr);
+      log_warn(LGPFX" %s: node does not serve full blocks (services=%#" PRIx64 ", %s).\n",
+              peer->name, (uint64)version.services, peer->clientStr);
       return 1;
    }
    /*
@@ -1078,9 +1078,9 @@ peer_handle_version(struct peer *peer)
    if (version.services & BTC_SERVICE_NODE_COMPACT_FILTERS) {
       log_info(LGPFX" %s: supports BIP157 compact filters.\n", peer->name);
    } else {
-      log_info(LGPFX" %s: no compact filter support (services=%#llx); "
+      log_info(LGPFX" %s: no compact filter support (services=%#" PRIx64 "); "
           "will use for headers only.\n",
-          peer->name, (unsigned long long)version.services);
+          peer->name, (uint64)version.services);
    }
    if (version.version < BTC_PROTO_FILTERING) {
       log_info(LGPFX" %s: client '%s' does not support filtering.\n",
@@ -1166,8 +1166,8 @@ peer_handle_cfheaders(struct peer *peer)
       log_warn(LGPFX" %s: failed to parse cfheaders.\n", peer->name);
       return res;
    }
-   log_info(LGPFX" %s: cfheaders type=%u numHeaders=%llu\n",
-       peer->name, cfh.filterType, (unsigned long long)cfh.numHeaders);
+   log_info(LGPFX" %s: cfheaders type=%u numHeaders=%" PRIu64 "\n",
+       peer->name, cfh.filterType, (uint64)cfh.numHeaders);
 
    res = peergroup_handle_cfheaders(peer, &cfh);
 
@@ -1187,8 +1187,8 @@ peer_handle_cfcheckpt(struct peer *peer)
       log_warn(LGPFX" %s: failed to parse cfcheckpt.\n", peer->name);
       return res;
    }
-   log_info(LGPFX" %s: cfcheckpt type=%u numHeaders=%llu\n",
-       peer->name, cfc.filterType, (unsigned long long)cfc.numHeaders);
+   log_info(LGPFX" %s: cfcheckpt type=%u numHeaders=%" PRIu64 "\n",
+       peer->name, cfc.filterType, (uint64)cfc.numHeaders);
 
    res = peergroup_handle_cfcheckpt(peer, &cfc);
 

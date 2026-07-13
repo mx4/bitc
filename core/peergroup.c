@@ -1624,8 +1624,8 @@ peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc)
 
    ASSERT(btc->state == BITC_STATE_UPDATE_TXDB);
 
-   log_info(LGPFX" BIP157: cfcheckpt from %s: %llu headers.\n",
-       peer_name(peer), (unsigned long long)cfc->numHeaders);
+   log_info(LGPFX" BIP157: cfcheckpt from %s: %" PRIu64 " headers.\n",
+       peer_name(peer), (uint64)cfc->numHeaders);
 
    if (pg->cfcheckptExpected == NULL) {
       /*
@@ -1645,8 +1645,8 @@ peergroup_handle_cfcheckpt(struct peer *peer, const btc_msg_cfcheckpt *cfc)
        * Subsequent response: compare against the expected set.
        */
       if ((int)cfc->numHeaders != pg->cfcheckptCount) {
-         log_warn(LGPFX" BIP157: cfcheckpt count mismatch: %llu vs %d.\n",
-                 (unsigned long long)cfc->numHeaders, pg->cfcheckptCount);
+         log_warn(LGPFX" BIP157: cfcheckpt count mismatch: %" PRIu64 " vs %d.\n",
+                 (uint64)cfc->numHeaders, pg->cfcheckptCount);
          agree = 0;
       } else {
          for (i = 0; i < (int)cfc->numHeaders; i++) {
@@ -1826,8 +1826,8 @@ peergroup_handle_cfheaders(struct peer *peer, const btc_msg_cfheaders *cfh)
    pg->cfhdrStartHeight = startHeight + (int)cfh->numHeaders;
    pg->cfhdrSyncStarted = 0;  /* allow next batch request */
 
-   log_info(LGPFX" BIP157: stored %llu cfheaders (heights %d..%d).\n",
-       (unsigned long long)cfh->numHeaders,
+   log_info(LGPFX" BIP157: stored %" PRIu64 " cfheaders (heights %d..%d).\n",
+       (uint64)cfh->numHeaders,
        startHeight, startHeight + (int)cfh->numHeaders - 1);
 
    /*
@@ -1871,8 +1871,8 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
    hash256_calc(&blk->header, sizeof blk->header, &blockHash);
    blockHeight = blockstore_get_block_height(bs, &blockHash);
 
-   log_info(LGPFX" BIP157: received matched block at height %d, %llu txs\n",
-       blockHeight, (unsigned long long)blk->txCount);
+   log_info(LGPFX" BIP157: received matched block at height %d, %" PRIu64 " txs\n",
+       blockHeight, (uint64)blk->txCount);
 
    /*
     * Feed each transaction to the wallet for credit/debit detection.
@@ -1887,8 +1887,8 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
       txBuf = buff_alloc();
       res = serialize_tx(txBuf, &blk->tx[i]);
       if (res) {
-         log_warn(LGPFX" BIP157: failed to serialize tx %llu in block %d.\n",
-                (unsigned long long)i, blockHeight);
+         log_warn(LGPFX" BIP157: failed to serialize tx %" PRIu64 " in block %d.\n",
+                (uint64)i, blockHeight);
          buff_free(txBuf);
          continue;
       }
@@ -1896,8 +1896,8 @@ peergroup_handle_block(struct peer *peer, const btc_msg_block *blk)
       rawLen = buff_curlen(txBuf);
       res = wallet_handle_tx(btc->wallet, &blockHash, raw, rawLen);
       if (res) {
-         log_warn(LGPFX" BIP157: wallet_handle_tx failed for tx %llu in block %d.\n",
-                (unsigned long long)i, blockHeight);
+         log_warn(LGPFX" BIP157: wallet_handle_tx failed for tx %" PRIu64 " in block %d.\n",
+                (uint64)i, blockHeight);
       }
       buff_free(txBuf);
    }
@@ -2278,8 +2278,8 @@ peergroup_check_download_stall(void)
       return;
    }
 
-   log_warn(LGPFX" sync stalled for %llu ms; dropping download peer %s.\n",
-           (unsigned long long)((now - pg->lastProgressTS) / 1000),
+   log_warn(LGPFX" sync stalled for %" PRIu64 " ms; dropping download peer %s.\n",
+           (uint64)((now - pg->lastProgressTS) / 1000),
            peer_name(dp));
 
    /*

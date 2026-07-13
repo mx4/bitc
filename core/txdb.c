@@ -159,7 +159,7 @@ txdb_print_coins(const struct txdb *txdb,
          continue;
       }
 
-      log_info(LGPFX" txo%03d: %s sp=%u id=%3u v=%llu\n",
+      log_info(LGPFX" txo%03d: %s sp=%u id=%3u v=%" PRIu64 "\n",
           i, txo_ent->btc_addr, txo_ent->spent, txo_ent->outIdx, txo_ent->value);
    }
    free(txo_array);
@@ -334,7 +334,7 @@ txdb_serialize_tx_key(uint64 tx_seq,
    snprintf(str, sizeof str, "/tx/%010llu/%s", tx_seq, hashStr);
    serialize_bytes(buf, str, strlen(str) + 1); /* include terminal '\0' */
 
-   log_info(LGPFX" adding %s seq=%llu : '%s'\n", hashStr, tx_seq, str);
+   log_info(LGPFX" adding %s seq=%" PRIu64 " : '%s'\n", hashStr, tx_seq, str);
 
    return buf;
 }
@@ -666,7 +666,7 @@ txdb_get_balance(struct txdb *txdb)
 
    hashtable_for_each(txdb->hash_txo, txdb_get_balance_cb, &balance);
 
-   log_info(LGPFX" BALANCE =  %llu -- %.8f BTC\n",
+   log_info(LGPFX" BALANCE =  %" PRIu64 " -- %.8f BTC\n",
        balance / 10, balance / ONE_BTC);
 
    return balance;
@@ -1390,7 +1390,7 @@ txdb_select_coins(struct txdb              *txdb,
     * txo_array is sorted in chronological order, so we'll be consuming old
     * coins first.
     */
-   log_info(LGPFX" select_coins: total_value=%llu fee=%llu\n",
+   log_info(LGPFX" select_coins: total_value=%" PRIu64 " fee=%" PRIu64 "\n",
        desc->total_value, desc->fee);
 
    while (value < (desc->total_value + desc->fee) && i < txo_num) {
@@ -1416,7 +1416,7 @@ txdb_select_coins(struct txdb              *txdb,
 
    ASSERT(value >= desc->total_value);
    *change = value - desc->total_value - desc->fee;
-   log_info(LGPFX" change=%llu\n", *change);
+   log_info(LGPFX" change=%" PRIu64 "\n", *change);
    free(txo_array);
 }
 
@@ -1466,7 +1466,7 @@ txdb_craft_tx(struct txdb              *txdb,
       btc_change = wallet_get_change_addr(btc->wallet);
       tx->out_count++;
       txdb_set_txo(tx, tx->out_count - 1, btc_change, change);
-      log_warn(LGPFX" change: %llu -- %.8f BTC\n", change, change / ONE_BTC);
+      log_warn(LGPFX" change: %" PRIu64 " -- %.8f BTC\n", change, change / ONE_BTC);
    }
 
    txdb_sign_tx_inputs(txdb, tx);
