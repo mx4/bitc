@@ -240,7 +240,7 @@ addrbook_open(struct config *config,
       char *name = file_getname(book->filename);
 
       log_warn(LGPFX" reading file %s -- %s -- %zu addrs.\n",
-              name, s, size / sizeof(btc_msg_address));
+              name, s, (size_t)size / sizeof(btc_msg_address));
       free(name);
       free(s);
    }

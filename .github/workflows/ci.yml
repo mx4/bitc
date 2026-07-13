@@ -20,11 +20,11 @@ jobs:
         libssl-dev libncurses-dev libcjson-dev
     - name: build (debug)
       run: make
+    - name: test (fuzz + gcs)
+      run: make check
     - name: build (strict warnings)
       run: make clean && make STRICT=1
     - name: build (release)
       run: make clean && make BUILD=release
     - name: build (asan+ubsan)
       run: make clean && make BUILD=asan+ubsan
-    - name: test (fuzz + gcs)
-      run: make check

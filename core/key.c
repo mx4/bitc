@@ -242,7 +242,7 @@ key_generate_new(void)
    OSSL_PARAM params[2];
 
    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
-                                                "secp256k1", 0);
+       (char *)"secp256k1", 0);
    params[1] = OSSL_PARAM_construct_end();
 
    gctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
