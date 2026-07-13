@@ -193,13 +193,13 @@ addrbook_open(struct config *config,
       if (res != 0) {
          log_warn(LGPFX" failed to create new addrbook: %s.\n",
                  strerror(res));
-         goto exit;
+         return res;
       }
       res = file_chmod(book->filename, 0600);
       if (res != 0) {
          log_warn(LGPFX" failed to chmod 0600 addrbook: %s.\n",
                  strerror(res));
-         goto exit;
+         return res;
       }
    }
 
@@ -207,7 +207,7 @@ addrbook_open(struct config *config,
    if (res) {
       log_warn(LGPFX" failed to open addrbook '%s' : %s\n",
               book->filename, strerror(res));
-      goto exit;
+      return res;
    }
 
    size = file_getsize(book->desc);
@@ -231,7 +231,6 @@ addrbook_open(struct config *config,
       size_t numRead;
       size_t numBytes;
       int numAddrs;
-      int i;
 
       numBytes = MIN(size - offset, sizeof buf);
 
@@ -240,7 +239,7 @@ addrbook_open(struct config *config,
          break;
       }
       numAddrs = numRead / sizeof(btc_msg_address);
-      for (i = 0; i < numAddrs; i++) {
+      for (int i = 0; i < numAddrs; i++) {
          struct peer_addr *a = safe_calloc(1, sizeof *a);
          bool s;
 
@@ -253,7 +252,6 @@ addrbook_open(struct config *config,
    }
 
    *bookOut = book;
-exit:
    return res;
 }
 
