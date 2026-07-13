@@ -64,11 +64,11 @@ time ./bitc -d --connect <ip> --sync-and-exit   # clean header-sync benchmark
 - `core/` — the engine: `peer.c`/`peergroup.c` (p2p + peer management),
   `block-store.c` (header chain + checkpoints), `btc-message.c`/`serialize.c`
   (wire protocol), `key.c`/`crypt.c`/`hash.c` (crypto), `wallet.c`, `txdb.c`,
-  `script.c`, `bloom.c`, `base58.c`, `rpc.c`.
+  `script.c`, `base58.c`, `rpc.c`.
 - `lib/` — reusable infra: `poll/` (home-grown `poll(2)` event loop),
   `netasync/` (async sockets), `util/`, `file/`, `poolworker/`, `config/`, etc.
-- `public/` — shared headers: `bitc.h` (the global `struct BITCApp *btc`),
-  `bitc-defs.h` (protocol constants/messages).
+- `core/` — app-wide shared headers and implementation: `bitc.h` (the global `struct BITCApp *btc`),
+  `bitc-defs.h` (protocol constants/messages), plus
 
 **Threading model** (important, non-obvious): a **single-threaded `poll(2)` event
 loop** (`lib/poll`, `select(2)` fallback) drives all socket I/O and message
@@ -77,11 +77,9 @@ state) runs on that one thread, so that shared state needs no locking. The
 "multi-threaded" claim is the separate **10-thread poolworker** (`lib/poolworker`)
 used for CPU offload. During header sync CPU sits ~27%; the work is latency-bound.
 
-**SPV mechanism**: currently BIP37 (bloom filter `filterload` + `merkleblock`),
-which modern Core nodes disable by default. There is an unfinished BIP37
-`peergroup_download_filtered_blocks` phase that runs after header sync and hits an
-`ASSERT(0)` in `blockstore_get_hash_from_birth`. The modernization direction is
-BIP157/158 compact block filters (not yet implemented).
+**SPV mechanism**: uses BIP157/158 compact block filters (not BIP37 bloom filters).
+The old BIP37 `peergroup_download_filtered_blocks` path is dead code that hits an
+`ASSERT(0)` in `blockstore_get_hash_from_birth`.
 
 **Header sync**: driven by a single `peergroup->downloadPeer` (parallel download
 from multiple peers corrupts the shared counters). Sync loops `getheaders` until a
@@ -98,7 +96,7 @@ Prioritized improvements:
 3. Validate header proof of work, difficulty, timestamps, and chainwork.
 4. Make wallet accounting reorg-safe.
 5. Version persistence formats and support recovery.
-6. Replace BIP37 with BIP157/158 compact block filters.
+6. Improve compact filter download parallelism and reorg handling.
 7. Add SegWit, Bech32m, and Taproot support.
 8. Migrate to versioned AEAD wallet encryption.
 9. Add descriptors, BIP32, and PSBT support.
