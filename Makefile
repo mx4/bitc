@@ -85,7 +85,7 @@ else
 CFLAGS += -O1 -g
 endif
 
-CFLAGS += -Ipublic -Ilib/public -Icore/ -Iapps/cli/ -Iext/src/public
+CFLAGS += -Icore/ -Iapps/cli/ -Ilib/config/ -Ilib/file/ -Ilib/fx/ -Ilib/hashtable/ -Ilib/ip_info/ -Ilib/netasync/ -Ilib/poll/ -Ilib/poolworker/ -Ilib/util/ -Iext/src/MurmurHash3/
 CFLAGS += $(DEP_CFLAGS)
 
 # leveldb/snappy live under the Homebrew prefix on macOS and ship no .pc file.
