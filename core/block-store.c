@@ -758,7 +758,7 @@ blockset_open_file(struct blockstore *blockStore,
       char *s = print_size(bs->filesize);
       char *name = file_getname(bs->filename);
       log_info(LGPFX" reading file %s -- %s -- %llu headers.\n",
-          name, s, bs->filesize / sizeof(btc_block_header));
+          name, s, (unsigned long long)(bs->filesize / sizeof(btc_block_header)));
       free(name);
       free(s);
    }
@@ -802,7 +802,7 @@ blockset_open_file(struct blockstore *blockStore,
 
          if (i == numHeaders - 1) {
             bitcui_set_status("loading headers .. %llu%%",
-                             (offset + numBytes) * 100 / bs->filesize);
+                           (unsigned long long)((offset + numBytes) * 100 / bs->filesize));
          }
          if (i == numHeaders - 1 ||
              (numBytes < sizeof buf && i > numHeaders - 256)) {
@@ -1037,7 +1037,7 @@ blockstore_get_hash_from_birth(const struct blockstore *bs,
 
          hash256_calc(&e->header, sizeof e->header, hash);
          s = print_time_local(birth, "%c");
-         log_info(LGPFX" birth %llu (%s) --> block %s.\n", ts, s, uint256_to_str(hash));
+         log_info(LGPFX" birth %llu (%s) --> block %s.\n", (unsigned long long)ts, s, uint256_to_str(hash));
          free(s);
          return;
       }
