@@ -989,7 +989,7 @@ wallet_craft_tx(struct wallet            *wallet,
    ASSERT(value == desc->total_value);
 
    if (value + desc->fee > wallet->balance) {
-      log_warn(LGPFX" insufficient funds: %llu vs %llu (%.8f vs %.8f) fee=%.8f\n",
+      log_warn(LGPFX" insufficient funds: %" PRIu64 " vs %" PRIu64 " (%.8f vs %.8f) fee=%.8f\n",
               value, wallet->balance, value / ONE_BTC,
               wallet->balance / ONE_BTC, desc->fee / ONE_BTC);
       return 1;
