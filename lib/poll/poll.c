@@ -32,12 +32,12 @@ struct poll_entry {
          int            idx;
          bool           readable;
          bool           writeable;
-      } d;
+      };
       struct {
          mtime_t        expiry;
          mtime_t        delay;
-      } t;
-   } u;
+      };
+   };
 };
 
 #define GET_ENTRY(_li) \
@@ -81,8 +81,8 @@ poll_check_time_queue_order(const struct poll_loop *poll)
 
    CIRCLIST_SCAN(li, poll->list_time) {
       struct poll_entry *e = GET_ENTRY(li);
-      ASSERT(last <= e->u.t.expiry);
-      last = e->u.t.expiry;
+      ASSERT(last <= e->expiry);
+      last = e->expiry;
    }
 }
 
@@ -123,7 +123,7 @@ poll_get_device_key_from_entry(const struct poll_entry *e)
 {
    ASSERT(e->type == POLL_CB_DEVICE);
 
-   return poll_get_device_key(e->u.d.fd, e->u.d.readable, e->u.d.writeable,
+   return poll_get_device_key(e->fd, e->readable, e->writeable,
                               e->permanent);
 }
 
@@ -325,13 +325,13 @@ poll_insert_time(struct poll_loop *poll,
       bool done = 0;
 
       e = GET_ENTRY(poll->list_time);
-      if (entry->u.t.expiry < e->u.t.expiry) {
+      if (entry->expiry < e->expiry) {
          circlist_push_item(&poll->list_time, &entry->item);
       } else {
          CIRCLIST_SCAN(li, poll->list_time) {
             e = GET_ENTRY(li);
 
-            if (entry->u.t.expiry < e->u.t.expiry) {
+            if (entry->expiry < e->expiry) {
                circlist_queue_item(&li, &entry->item);
                done = 1;
                break;
@@ -464,14 +464,14 @@ poll_device_poll(struct poll_loop *spoll,
 
    CIRCLIST_SCAN(li, spoll->list_device) {
       struct poll_entry *e = GET_ENTRY(li);
-      bool read  = e->u.d.readable;
-      bool write = e->u.d.writeable;
-      int fd     = e->u.d.fd;
+      bool read  = e->readable;
+      bool write = e->writeable;
+      int fd     = e->fd;
 
       ASSERT(fd >= 0);
 
       LOG(1, (LGPFX" %s: poll(2)'ing r=%u w=%u fd=%d\n",
-              __FUNCTION__, read, write, fd));
+              __func__, read, write, fd));
 
       ASSERT(n < spoll->poll_max_fds);
       poll_fds[n].fd = fd;
@@ -483,7 +483,7 @@ poll_device_poll(struct poll_loop *spoll,
       if (write) {
          poll_fds[n].events |= POLLOUT;
       }
-      e->u.d.idx = n;
+      e->idx = n;
       n++;
    }
 
@@ -512,12 +512,12 @@ poll_device_poll(struct poll_loop *spoll,
          ssize_t res;
          uint8 c;
          log_info(LGPFX" %s: just poll'd: fd=%d r=%u w=%u cb=%p data=%p\n",
-             __FUNCTION__, e->u.d.fd, e->u.d.readable, e->u.d.writeable,
+             __func__, e->fd, e->readable, e->writeable,
              e->callback, e->callbackData);
-         res = read(e->u.d.fd, &c, 1);
+         res = read(e->fd, &c, 1);
          if (res != EAGAIN && res != 1) {
             log_warn(LGPFX" fd=%d res=%zd errno=%d (%s)\n",
-                    e->u.d.fd, res, errno, strerror(errno));
+                    e->fd, res, errno, strerror(errno));
          }
 
       }
@@ -547,14 +547,14 @@ poll_device_select(struct poll_loop *poll,
 
    CIRCLIST_SCAN(li, poll->list_device) {
       struct poll_entry *e = GET_ENTRY(li);
-      bool read  = e->u.d.readable;
-      bool write = e->u.d.writeable;
-      int fd     = e->u.d.fd;
+      bool read  = e->readable;
+      bool write = e->writeable;
+      int fd     = e->fd;
 
       ASSERT(fd >= 0);
 
       LOG(2, (LGPFX" %s: polling r=%u w=%u fd=%d\n",
-              __FUNCTION__, read, write, fd));
+              __func__, read, write, fd));
 
       if (read) {
          ASSERT(!FD_ISSET(fd, &poll->fds_rd));
@@ -613,7 +613,7 @@ poll_get_next_expiry(const struct poll_loop *poll)
       return 0;
    }
    e = GET_ENTRY(poll->list_time);
-   return e->u.t.expiry;
+   return e->expiry;
 }
 
 
@@ -635,11 +635,11 @@ poll_entry_fire(const struct poll_entry *e)
 
    if (e->type == POLL_CB_DEVICE) {
       LOG(1, (LGPFX" %s: firing DEVICE CB fd=%d r=%u w=%u p=%u fun=%p data=%p\n",
-              __FUNCTION__, e->u.d.fd, e->u.d.readable, e->u.d.writeable,
+              __func__, e->fd, e->readable, e->writeable,
               e->permanent, e->callback, e->callbackData));
    } else {
       LOG(1, (LGPFX" %s: firing TIME CB p=%d fun=%p data=%p\n",
-              __FUNCTION__, e->permanent, e->callback, e->callbackData));
+              __func__, e->permanent, e->callback, e->callbackData));
    }
 
    e->callback(e->callbackData);
@@ -659,16 +659,16 @@ poll_entry_active(const struct poll_loop *poll,
                   const struct poll_entry *e)
 {
    if (poll->use_poll) {
-      int idx = e->u.d.idx;
+      int idx = e->idx;
 
       ASSERT(idx < poll->poll_max_fds);
-      ASSERT(poll->poll_fds[idx].fd == e->u.d.fd);
+      ASSERT(poll->poll_fds[idx].fd == e->fd);
 
-      return (e->u.d.readable  && (poll->poll_fds[idx].revents & POLLIN)  != 0) ||
-             (e->u.d.writeable && (poll->poll_fds[idx].revents & POLLOUT) != 0);
+      return (e->readable  && (poll->poll_fds[idx].revents & POLLIN)  != 0) ||
+             (e->writeable && (poll->poll_fds[idx].revents & POLLOUT) != 0);
    } else {
-      return (e->u.d.readable  && FD_ISSET(e->u.d.fd, &poll->fds_rd)) ||
-             (e->u.d.writeable && FD_ISSET(e->u.d.fd, &poll->fds_wr));
+      return (e->readable  && FD_ISSET(e->fd, &poll->fds_rd)) ||
+             (e->writeable && FD_ISSET(e->fd, &poll->fds_wr));
    }
 }
 
@@ -750,11 +750,11 @@ poll_get_next_expired(struct poll_loop *poll,
 
    e = GET_ENTRY(poll->list_time);
 
-   if (e->u.t.expiry <= now) {
+   if (e->expiry <= now) {
       return e;
    }
 
-   ASSERT(e->u.t.expiry > now);
+   ASSERT(e->expiry > now);
    return NULL;
 }
 
@@ -770,7 +770,7 @@ poll_get_next_expired(struct poll_loop *poll,
 static void
 poll_recalc_expiry(struct poll_entry *e)
 {
-   e->u.t.expiry = time_get() + e->u.t.delay;
+   e->expiry = time_get() + e->delay;
 }
 
 
@@ -914,7 +914,7 @@ poll_callback_time(struct poll_loop *poll,
    ASSERT(callback);
 
    LOG(1, (LGPFX" %s: registering time CB fun=%p cbData=%p delay=%.1f msec p=%u\n",
-       __FUNCTION__, callback, callbackData, delayUsec / 1000.0, permanent));
+       __func__, callback, callbackData, delayUsec / 1000.0, permanent));
 
    e = poll_entry_get(poll);
    e->type         = POLL_CB_TIME;
@@ -922,7 +922,7 @@ poll_callback_time(struct poll_loop *poll,
    e->callbackData = callbackData;
    e->permanent    = permanent;
    e->refCount     = 0;
-   e->u.t.delay      = delayUsec;
+   e->delay      = delayUsec;
 
    circlist_init_item(&e->item);
 
@@ -952,7 +952,7 @@ poll_callback_device(struct poll_loop *poll,
    struct poll_entry *e;
 
    LOG(1, (LGPFX" %s: registering dev CB on fd=%d fun=%p cbData=%p r=%u w=%u p=%u\n",
-       __FUNCTION__, fd, callback, callbackData, readable, writeable, permanent));
+       __func__, fd, callback, callbackData, readable, writeable, permanent));
 
    ASSERT(poll);
    ASSERT(callback);
@@ -963,10 +963,10 @@ poll_callback_device(struct poll_loop *poll,
    e->callbackData  = callbackData;
    e->permanent     = permanent;
    e->refCount      = 0;
-   e->u.d.fd          = fd;
-   e->u.d.idx         = -1;
-   e->u.d.readable    = readable;
-   e->u.d.writeable   = writeable;
+   e->fd          = fd;
+   e->idx         = -1;
+   e->readable    = readable;
+   e->writeable   = writeable;
 
    circlist_init_item(&e->item);
 
@@ -993,7 +993,7 @@ poll_callback_time_remove(struct poll_loop *poll,
    struct circlist_item *li;
 
    LOG(1, (LGPFX" %s: unregistering TIME CB fun=%p data=%p.\n",
-       __FUNCTION__, callback, callbackData));
+       __func__, callback, callbackData));
 
    list = &poll->list_time;
 
@@ -1036,23 +1036,23 @@ poll_callback_device_remove(struct poll_loop *poll,
    bool s;
 
    LOG(1, (LGPFX" %s: unregistering DEVICE CB fd=%d r=%u w=%u p=%u fun=%p.\n",
-       __FUNCTION__, fd, readable, writeable, permanent, callback));
+       __func__, fd, readable, writeable, permanent, callback));
 
    key = poll_get_device_key(fd, readable, writeable, permanent);
    e = NULL;
 
-   s = hashtable_lookup(poll->hash, &key, sizeof key, (void *)&e);
+   s = hashtable_lookup(poll->hash, &key, sizeof key, (void **)&e);
    if (!s) {
       return 0;
    }
 
    ASSERT(e->type == POLL_CB_DEVICE);
-   ASSERT(e->u.d.fd == fd);
+   ASSERT(e->fd == fd);
    ASSERT(e->callback == callback);
    ASSERT(e->callbackData == callbackData);
    ASSERT(e->permanent == permanent);
-   ASSERT(e->u.d.readable == readable);
-   ASSERT(e->u.d.writeable == writeable);
+   ASSERT(e->readable == readable);
+   ASSERT(e->writeable == writeable);
    ASSERT(e->queued == 1);
 
    e->queued = 0;

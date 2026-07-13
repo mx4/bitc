@@ -76,7 +76,7 @@ addrbook_replace_entry(struct addrbook *book,
    bool s;
 
    s = hashtable_lookup(book->hash_addr, paddr->addr.ip,
-                        sizeof paddr->addr.ip, (void*)&paddr0);
+                        sizeof paddr->addr.ip, (void **)&paddr0);
    ASSERT(s);
    addrbook_remove_entry(book, paddr0);
    free(paddr0);
@@ -132,7 +132,7 @@ addrbook_get_rand_addr(const struct addrbook *book)
    key = NULL;
    keyLen = 0;
 
-   hashtable_get_entry_idx(book->hash_addr, idx, (void *)&key,
+   hashtable_get_entry_idx(book->hash_addr, idx, (const void **)&key,
                            &keyLen, (void**)&addr);
 
    ASSERT(addr);
@@ -319,7 +319,7 @@ addrbook_save(struct addrbook *book)
    count = addrbook_get_count(book);
    ASSERT(count > 0);
 
-   hashtable_linearize(book->hash_addr, sizeof(btc_msg_address), (void *)&addrs);
+   hashtable_linearize(book->hash_addr, sizeof(btc_msg_address), (void **)&addrs);
    ASSERT(addrs);
    len = count * sizeof *addrs;
 

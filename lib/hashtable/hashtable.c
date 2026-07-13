@@ -596,7 +596,7 @@ hashtable_linearize_cb(const void *key,
                        void       *cbData,
                        void       *keyData)
 {
-   struct hashtable_linearize_info *info = (struct hashtable_linearize_info*)cbData;
+   struct hashtable_linearize_info *info = cbData;
 
    memcpy((uint8*)info->buf + info->idx * info->entry_size, keyData, info->entry_size);
    info->idx++;

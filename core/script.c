@@ -58,7 +58,7 @@ script_push_data(struct buff *buf,
 {
    ASSERT(buf->grow);
 
-   log_info("%s: len=%zu / %#zx\n", __FUNCTION__, len, len);
+   log_info("%s: len=%zu / %#zx\n", __func__, len, len);
 
    if (len < OP_PUSHDATA1) {
       serialize_uint8(buf, len);
@@ -621,8 +621,7 @@ script_sign(struct wallet               *wallet,
       log_warn(LGPFX" script TX_PUBKEY\n");
       NOT_IMPLEMENTED();
       break;
-   case TX_PUBKEYHASH:
-      (void)0; // XXX: clang bug?
+   case TX_PUBKEYHASH: {
       uint160 *keyHash = (uint160*)data_addr;
 
       ASSERT(data_len == sizeof(uint160));
@@ -639,6 +638,7 @@ script_sign(struct wallet               *wallet,
          goto exit;
       }
       break;
+   }
    default:
       NOT_IMPLEMENTED();
       log_warn(LGPFX" script TX_NONSTANDARD\n");

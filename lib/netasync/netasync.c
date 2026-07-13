@@ -16,7 +16,7 @@
 
 #define LGPFX "ANET:"
 
-static bool verbose = 0;
+static int verbose = 0;
 
 static void netasync_receive_cb(void *clientData);
 static void netasync_send_ready_cb(void *clientData);
@@ -26,7 +26,7 @@ static void netasync_send_ready_cb(void *clientData);
 
 struct netasync_send_ctx {
    uint64                    magic;
-   const void               *buf_orig;
+   void                     *buf_orig;
    const void               *buf;
    size_t                    len;
    netasync_callback        *callback;
@@ -382,7 +382,7 @@ netasync_accept_cb(void *clientData)
    ASSERT(sock->bind);
 
    LOG(1, (LGPFX" %s -- %s: fd=%d err = %d\n",
-           __FUNCTION__, sock->hostname, sock->fd, sock->err));
+           __func__, sock->hostname, sock->fd, sock->err));
 
    addrSz = sizeof addr;
    fd = accept(sock->fd, &addr, &addrSz);
@@ -427,7 +427,7 @@ netasync_bind(struct netasync_socket   *sock,
    sock->connectCbData = clientData;
    sock->connectTS     = time_get();
 
-   LOG(1, (LGPFX" %s: binding to %s\n", __FUNCTION__, sock->hostname));
+   LOG(1, (LGPFX" %s: binding to %s\n", __func__, sock->hostname));
 
    sock->fd = socket(AF_INET, SOCK_STREAM, 0);
    if (sock->fd < 0) {
@@ -595,7 +595,7 @@ netasync_socks_handler(struct netasync_socket *sock)
    int res;
 
    LOG(1, (LGPFX" %s:%u -- %s err=%d\n",
-           __FUNCTION__, __LINE__,
+           __func__, __LINE__,
            socks5_state2str(sock->socks_state), sock->err));
 
    if (sock->err != 0) {
@@ -690,7 +690,7 @@ netasync_connected(void *clientData)
    ASSERT(sock->magic == SOCK_MAGIC);
 
    LOG(1, (LGPFX" %s -- %s: fd=%d err = %d\n",
-           __FUNCTION__, sock->hostname, sock->fd, sock->err));
+           __func__, sock->hostname, sock->fd, sock->err));
 
    sock->connect_async = 0;
 
@@ -744,7 +744,7 @@ netasync_resolve(const char         *hostname,
    char service[10];
    int err;
 
-   LOG(1, (LGPFX" %s host='%s' port=%u\n", __FUNCTION__, hostname, port));
+   LOG(1, (LGPFX" %s host='%s' port=%u\n", __func__, hostname, port));
 
    snprintf(service, sizeof service, "%u", port);
 
@@ -781,7 +781,7 @@ netasync_resolve(const char         *hostname,
 static void
 netasync_connect_timeout_cb(void *clientData)
 {
-   struct netasync_socket *sock = (struct netasync_socket *)clientData;
+   struct netasync_socket *sock = clientData;
 
    LOG(1, (LGPFX" connect-timeout on fd=%d -- %s\n", sock->fd, sock->hostname));
 
@@ -841,7 +841,7 @@ netasync_connect(struct netasync_socket   *sock,
    sock->connect_async   = 0;
    ASSERT(sock->fd < 0);
 
-   LOG(1, (LGPFX" %s: Connecting to %s\n", __FUNCTION__, sock->hostname));
+   LOG(1, (LGPFX" %s: Connecting to %s\n", __func__, sock->hostname));
 
    sock->fd = socket(AF_INET, SOCK_STREAM, 0);
    if (sock->fd < 0) {
@@ -999,7 +999,7 @@ netasync_receive_cb(void *clientData)
       }
    }
    LOG(1, (LGPFX" %s: numRead=%zu (idx=%zu vs len=%zu)\n",
-       __FUNCTION__, numRead, sock->recvBufIdx, sock->recvBufLen));
+       __func__, numRead, sock->recvBufIdx, sock->recvBufLen));
 
    ASSERT(sock->recvPartial == 0);
 
@@ -1100,7 +1100,7 @@ next:
       netasync_fire_errorhandler(sock);
       return;
    } else {
-      ctx->buf = (uint8*)ctx->buf + res;
+      ctx->buf = (const uint8 *)ctx->buf + res;
       ctx->len -= res;
       netasync.sent += res;
    }
@@ -1113,7 +1113,7 @@ next:
 
       sock->sendCtxList = ctx->next;
       ctx->magic = -1;
-      free((void*)ctx->buf_orig);
+      free(ctx->buf_orig);
       free(ctx);
       if (sock->sendCtxList == NULL) {
          sock->sendCtxTail = &sock->sendCtxList;
@@ -1146,7 +1146,7 @@ next:
 static void
 netasync_send_ready_cb(void *clientData)
 {
-   struct netasync_socket *sock = (struct netasync_socket*) clientData;
+   struct netasync_socket *sock = clientData;
 
    ASSERT(sock->sendCtxList->magic == CTX_MAGIC);
    ASSERT(sock->magic == SOCK_MAGIC);
@@ -1183,7 +1183,7 @@ netasync_send(struct netasync_socket *sock,
 
    ctx = safe_malloc(sizeof *ctx);
    ctx->magic      = CTX_MAGIC;
-   ctx->buf_orig   = buf;
+   ctx->buf_orig   = (void *)buf;
    ctx->buf        = buf;
    ctx->len        = len;
    ctx->clientData = clientData;
@@ -1230,7 +1230,7 @@ netasync_free_send_buf(struct netasync_socket *sock)
    while (ctx) {
       struct netasync_send_ctx *next = ctx->next;
 
-      free((void*)ctx->buf_orig);
+      free(ctx->buf_orig);
       memset(ctx, 0xff, sizeof *ctx);
       free(ctx);
       ctx = next;

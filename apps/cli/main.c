@@ -837,7 +837,7 @@ bitc_process_events(void)
     * BITC_STATE_EXITING.
     */
    if (btc->stop == 2) {
-      log_info(LGPFX" %s -- BITC_STATE_EXITING (CTRL-C)\n", __FUNCTION__);
+      log_info(LGPFX" %s -- BITC_STATE_EXITING (CTRL-C)\n", __func__);
       btc->state = BITC_STATE_EXITING;
    }
 
@@ -851,12 +851,12 @@ bitc_process_events(void)
 
       switch (req->type) {
       case BTC_REQ_STOP:
-         log_info(LGPFX" %s -- BITC_STATE_EXITING.\n", __FUNCTION__);
+         log_info(LGPFX" %s -- BITC_STATE_EXITING.\n", __func__);
          btc->stop = 1;
          btc->state = BITC_STATE_EXITING;
          break;
       case BTC_REQ_TX:
-         log_info(LGPFX" %s -- initiating tx.\n", __FUNCTION__);
+         log_info(LGPFX" %s -- initiating tx.\n", __func__);
          struct btc_tx_desc *tx_desc = req->clientData;
          bitc_transmit_tx(tx_desc);
          free(tx_desc);
@@ -986,7 +986,7 @@ bitc_init(struct secure_area *passphrase,
 {
    int res;
 
-   log_info(LGPFX" %s -- BITC_STATE_STARTING.\n", __FUNCTION__);
+   log_info(LGPFX" %s -- BITC_STATE_STARTING.\n", __func__);
    btc->state = BITC_STATE_STARTING;
    btc->wallet_state = WALLET_UNKNOWN;
    btc->updateAndExit = updateAndExit;
@@ -1046,7 +1046,7 @@ bitc_init(struct secure_area *passphrase,
 static void
 bitc_exit(void)
 {
-   log_info(LGPFX" %s\n", __FUNCTION__);
+   log_info(LGPFX" %s\n", __func__);
    rpc_exit();
    peergroup_exit(btc->peerGroup);
    btc->peerGroup = NULL;

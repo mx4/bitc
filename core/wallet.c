@@ -173,7 +173,7 @@ wallet_print_key_cb(const void *key,
                     void *cbData,
                     void *keyData)
 {
-   struct wallet_key *wkey = (struct wallet_key *)keyData;
+   struct wallet_key *wkey = keyData;
    char *ts;
 
    ASSERT(wkey->btc_addr);
@@ -259,7 +259,7 @@ wallet_verify_hmac(const struct wallet *wallet,
       *encPrivKey = key;
       *encLen = key_len;
    } else {
-      log_info(LGPFX" %s failed.\n", __FUNCTION__);
+      log_info(LGPFX" %s failed.\n", __func__);
       free(key);
    }
 
@@ -443,8 +443,8 @@ wallet_save_key_cb(const void *key,
                    void *clientData,
                    void *keyData)
 {
-   struct wallet_key *wkey = (struct wallet_key *)keyData;
-   struct config *wcfg = (struct config *)clientData;
+   struct wallet_key *wkey = keyData;
+   struct config *wcfg = clientData;
    uint8 *privkey;
    uint8 *pubkey;
    size_t privlen;
@@ -670,9 +670,9 @@ wallet_lookup_pubkey(const struct wallet *wallet,
    struct wallet_key *wkey;
    bool s;
 
-   s = hashtable_lookup(wallet->hash_keys, pub_key, sizeof *pub_key, (void *)&wkey);
-   if (s == 0) {
-      return NULL;
+s = hashtable_lookup(wallet->hash_keys, pub_key, sizeof *pub_key, (void **)&wkey);
+    if (s == 0) {
+       return NULL;
    }
    ASSERT(wkey->key);
    return wkey->key;
@@ -694,8 +694,8 @@ wallet_is_pubkey_spendable(const struct wallet *wallet,
    struct wallet_key *wkey;
    bool s;
 
-   s = hashtable_lookup(wallet->hash_keys, pub_key, sizeof *pub_key, (void *)&wkey);
-   ASSERT(s);
+s = hashtable_lookup(wallet->hash_keys, pub_key, sizeof *pub_key, (void **)&wkey);
+    ASSERT(s);
 
    return wkey->spendable;
 }
@@ -731,7 +731,7 @@ wallet_export_addrs_cb(const void *key,
                        void *cbData,
                        void *keyData)
 {
-   struct wallet_key *wkey = (struct wallet_key*)keyData;
+   struct wallet_key *wkey = keyData;
    struct bitcui_addr **addrPtr = (struct bitcui_addr **)cbData;
    struct bitcui_addr *addr = *addrPtr;
 
@@ -910,7 +910,7 @@ wallet_get_birth_cb(const void *key,
                     void *clientData,
                     void *keyData)
 {
-   struct wallet_key *wkey = (struct wallet_key *)keyData;
+   struct wallet_key *wkey = keyData;
    uint64 *birth = (uint64 *)clientData;
 
    *birth = MIN(*birth, wkey->birth);
@@ -949,7 +949,7 @@ wallet_free_key_cb(const void *key,
                    size_t keyLen,
                    void *clientData)
 {
-   struct wallet_key *wkey = (struct wallet_key *)clientData;
+   struct wallet_key *wkey = clientData;
 
    ASSERT(wkey);
 
@@ -1013,8 +1013,8 @@ wallet_find_key_by_idx_cb(const void *key,
                           void       *clientData,
                           void       *keyData)
 {
-   struct wallet_find_data *data = (struct wallet_find_data *)clientData;
-   struct wallet_key *wkey = (struct wallet_key *)keyData;
+   struct wallet_find_data *data = clientData;
+   struct wallet_key *wkey = keyData;
 
    if (wkey->cfg_idx == data->cfg_idx) {
       data->wkey = wkey;
@@ -1250,8 +1250,8 @@ wallet_get_filter_scripts_cb(const void *key,
                               void *cbData,
                               void *keyData)
 {
-   struct filter_scripts_ctx *ctx = (struct filter_scripts_ctx *)cbData;
-   struct wallet_key *wkey = (struct wallet_key *)keyData;
+   struct filter_scripts_ctx *ctx = cbData;
+   struct wallet_key *wkey = keyData;
    uint8 *script;
 
    /*

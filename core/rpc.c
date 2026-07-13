@@ -46,7 +46,7 @@ rpc_accept_cb(struct netasync_socket *socket,
 {
    ASSERT(err == 0);
 
-   log_info(LGPFX" %s:%u -- got a connection.\n", __FUNCTION__, __LINE__);
+   log_info(LGPFX" %s:%u -- got a connection.\n", __func__, __LINE__);
 
    netasync_close(socket); // for now.
 }
@@ -67,11 +67,11 @@ rpc_init(void)
    int err;
 
    if (config_getbool(btc->config, 0, "rpc.enable") == 0) {
-      log_info(LGPFX" %s: rpc disabled\n", __FUNCTION__);
+      log_info(LGPFX" %s: rpc disabled\n", __func__);
       return 0;
    }
 
-   log_info(LGPFX" %s:%u\n", __FUNCTION__, __LINE__);
+   log_info(LGPFX" %s:%u\n", __func__, __LINE__);
 
    sock = netasync_create();
 
@@ -85,7 +85,7 @@ rpc_init(void)
       log_info(LGPFX" failed to bind: %s (%d)\n", strerror(err), err);
       return err;
    }
-   log_info(LGPFX" %s: listening on localhost:999.\n", __FUNCTION__);
+   log_info(LGPFX" %s: listening on localhost:999.\n", __func__);
 
    return 0;
 }

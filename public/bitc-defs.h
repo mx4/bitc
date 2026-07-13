@@ -2,7 +2,7 @@
 
 #include "basic_defs.h"
 #include "hash.h"
-#include "stdlib.h"
+#include <stdlib.h>
 
 #define BTC_CLIENT_VERSION      "0.1.0"
 #define BTC_CLIENT_DESC         "SPV bitcoin client"

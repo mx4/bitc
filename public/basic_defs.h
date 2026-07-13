@@ -1,36 +1,29 @@
 #pragma once
 
-#ifdef linux
-#include <stdio.h>
-#else
+#include <stdbool.h>
 #include <stddef.h>
-#endif
+#include <stdint.h>
+#include <stdnoreturn.h>
 
 #define __BASIC_DEFS_H__
 
-typedef unsigned long long uint64;
-typedef unsigned int       uint32;
-typedef unsigned short     uint16;
-typedef unsigned char      uint8;
-typedef long long int64;
-typedef int       int32;
-typedef short     int16;
-typedef char      int8;
-#ifndef bool
-typedef char      bool;
-#endif
+typedef uint64_t  uint64;
+typedef uint32_t  uint32;
+typedef uint16_t  uint16;
+typedef uint8_t   uint8;
+typedef int64_t   int64;
+typedef int32_t   int32;
+typedef int16_t   int16;
+typedef int8_t    int8;
+
 typedef uint64 mtime_t;
 
-#ifndef __APPLE__
-#ifdef __x86_64__
-//typedef uint64 uintptr_t;
-#else
-typedef uint32 uintptr_t;
+#ifndef FALSE
+#define FALSE   false
 #endif
+#ifndef TRUE
+#define TRUE    true
 #endif
-
-#define FALSE   0
-#define TRUE    1
 
 #define likely(_e)       __builtin_expect(!!(_e), 1)
 #define unlikely(_e)     __builtin_expect((_e),   0)
@@ -50,12 +43,8 @@ typedef uint32 uintptr_t;
 #define STRINGIFY(_x)   #_x
 #define STR(_x)         STRINGIFY(_x)
 
-#ifndef offsetof
-#define offsetof(_t, _m) ((size_t) &((_t *)0)->_m)
-#endif
-
 #define PRINTF_GCC_DECL(_f, _v) __attribute__((__format__(__printf__, _f, _v)))
-#define NORETURN                __attribute__((noreturn))
+#define NORETURN                __attribute__((__noreturn__))
 
 /*
  * Compile-time assertion. Previously a no-op on GCC/clang; use C11's

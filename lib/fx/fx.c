@@ -352,7 +352,7 @@ fx_api_curl_write_cb(void *ptr,
 {
    size_t len = size * nmemb;
 
-   LOG(1, (LGPFX" %s got write of %zu bytes\n", __FUNCTION__, len));
+   LOG(1, (LGPFX" %s got write of %zu bytes\n", __func__, len));
    buff_copy_to(fx.buf, ptr, len);
 
    return len;

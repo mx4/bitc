@@ -585,7 +585,7 @@ bitcui_poll_shutdown(void)
 static void
 bitcui_exit(void)
 {
-   log_info(LGPFX" %s\n", __FUNCTION__);
+   log_info(LGPFX" %s\n", __func__);
 
    fx_exit();
    poolworker_wait(btc->pw);

@@ -28,7 +28,7 @@ struct KeyValuePair {
       int64  val;
       bool   trueOrFalse;
       char  *str;
-   } u;
+   };
 };
 
 struct config {
@@ -130,7 +130,7 @@ config_freekvlist(struct KeyValuePair *list)
 
       next = e->next;
       if (e->type == CONFIG_KV_UNKNOWN || e->type == CONFIG_KV_STRING) {
-         free(e->u.str);
+         free(e->str);
       }
       free(e->key);
       free(e);
@@ -165,8 +165,8 @@ config_setint64(struct config *config,
 
    if (e) {
       if (e->type == CONFIG_KV_UNKNOWN) {
-         free(e->u.str);
-         e->u.str = NULL;
+         free(e->str);
+         e->str = NULL;
       } else {
          ASSERT(e->type == CONFIG_KV_INT64);
       }
@@ -177,7 +177,7 @@ config_setint64(struct config *config,
       config_insert(config, e);
    }
    e->save = 1;
-   e->u.val = val;
+   e->val = val;
 }
 
 
@@ -207,8 +207,8 @@ config_setbool(struct config *config,
 
    if (e) {
       if (e->type == CONFIG_KV_UNKNOWN) {
-         free(e->u.str);
-         e->u.str = NULL;
+         free(e->str);
+         e->str = NULL;
       } else {
          ASSERT(e->type == CONFIG_KV_BOOL);
       }
@@ -219,7 +219,7 @@ config_setbool(struct config *config,
       config_insert(config, e);
    }
    e->save = 1;
-   e->u.trueOrFalse = s;
+   e->trueOrFalse = s;
 }
 
 
@@ -276,8 +276,8 @@ config_setstring(struct config *config,
 
    if (e) {
       ASSERT(e->type == CONFIG_KV_STRING || e->type == CONFIG_KV_UNKNOWN);
-      free(e->u.str);
-      e->u.str = NULL;
+      free(e->str);
+      e->str = NULL;
    } else {
       e = safe_malloc(sizeof *e);
       e->key  = safe_strdup(key);
@@ -285,7 +285,7 @@ config_setstring(struct config *config,
       config_insert(config, e);
    }
    e->save = 1;
-   e->u.str = str ? safe_strdup(str) : NULL;
+   e->str = str ? safe_strdup(str) : NULL;
 }
 
 
@@ -306,7 +306,7 @@ config_setunknownkv(struct config *config,
 
    e = safe_malloc(sizeof *e);
    e->key   = safe_strdup(key);
-   e->u.str = safe_strdup(val);
+   e->str = safe_strdup(val);
    e->type  = CONFIG_KV_UNKNOWN;
    e->save  = 1;
 
@@ -443,14 +443,14 @@ config_getint64(struct config *config,
 
    if (e) {
       if (e->type == CONFIG_KV_UNKNOWN) {
-         int64 v = atoll(e->u.str);
-         free(e->u.str);
-         e->u.val = v;
+         int64 v = atoll(e->str);
+         free(e->str);
+         e->val = v;
          e->type = CONFIG_KV_INT64;
       } else {
          ASSERT(e->type == CONFIG_KV_INT64);
       }
-      return e->u.val;
+      return e->val;
    } else {
       config_setint64(config, defaultValue, "%s", key);
       e = config_get(config, key);
@@ -490,20 +490,20 @@ config_getbool(struct config *config,
    if (e) {
       if (e->type == CONFIG_KV_UNKNOWN) {
          bool s;
-         if (strcasecmp(e->u.str, "true") == 0) {
+         if (strcasecmp(e->str, "true") == 0) {
             s = TRUE;
          } else {
-            ASSERT(strcasecmp(e->u.str, "false") == 0);
+            ASSERT(strcasecmp(e->str, "false") == 0);
             s = FALSE;
          }
-         free(e->u.str);
-         e->u.str = NULL;
-         e->u.trueOrFalse = s;
+         free(e->str);
+         e->str = NULL;
+         e->trueOrFalse = s;
          e->type = CONFIG_KV_BOOL;
       } else {
          ASSERT(e->type == CONFIG_KV_BOOL);
       }
-      return e->u.trueOrFalse;
+      return e->trueOrFalse;
    } else {
       config_setbool(config, defaultValue, "%s", key);
       e = config_get(config, key);
@@ -546,7 +546,7 @@ config_getstring(struct config *config,
       } else {
          ASSERT(e->type == CONFIG_KV_STRING);
       }
-      return e->u.str ? safe_strdup(e->u.str) : NULL;
+      return e->str ? safe_strdup(e->str) : NULL;
    } else {
       config_setstring(config, defaultStr, "%s", key);
       e = config_get(config, key);
@@ -723,15 +723,15 @@ config_write(struct config *conf,
 
       switch (e->type) {
       case CONFIG_KV_INT64:
-         s = safe_asprintf("%s = \"%lld\"\n", e->key, e->u.val);
+         s = safe_asprintf("%s = \"%lld\"\n", e->key, e->val);
          break;
       case CONFIG_KV_BOOL:
-         s = safe_asprintf("%s = \"%s\"\n", e->key, e->u.trueOrFalse ? "TRUE" : "FALSE");
+         s = safe_asprintf("%s = \"%s\"\n", e->key, e->trueOrFalse ? "TRUE" : "FALSE");
          break;
       default:
          ASSERT(e->type == CONFIG_KV_UNKNOWN || e->type == CONFIG_KV_STRING);
-         if (e->u.str) {
-            s = safe_asprintf("%s = \"%s\"\n", e->key, e->u.str);
+         if (e->str) {
+            s = safe_asprintf("%s = \"%s\"\n", e->key, e->str);
          }
       }
 

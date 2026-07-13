@@ -144,13 +144,13 @@ txdb_print_coins(const struct txdb *txdb,
 
    n = hashtable_getnumentries(txdb->hash_txo);
    if (n == 0) {
-      log_info(LGPFX" %s: no coins found\n", __FUNCTION__);
+      log_info(LGPFX" %s: no coins found\n", __func__);
       return;
    }
 
-   hashtable_linearize(txdb->hash_txo, sizeof *txo_array, (void *)&txo_array);
+   hashtable_linearize(txdb->hash_txo, sizeof *txo_array, (void **)&txo_array);
    ASSERT(txo_array);
-   log_info(LGPFX" %s: %d coins available:\n", __FUNCTION__, n);
+   log_info(LGPFX" %s: %d coins available:\n", __func__, n);
 
    for (i = 0; i < n; i++) {
       struct txo_entry *txo_ent = txo_array + i;
@@ -197,7 +197,7 @@ txdb_hashtable_free_tx_entry(const void *key,
                              size_t      keyLen,
                              void       *clientData)
 {
-   struct tx_entry *txe = (struct tx_entry *)clientData;
+   struct tx_entry *txe = clientData;
 
    txdb_free_tx_entry(txe);
 }
@@ -216,7 +216,7 @@ txdb_hashtable_free_txo_entry(const void *key,
                               size_t      keyLen,
                               void       *clientData)
 {
-   struct txo_entry *txo = (struct txo_entry *)clientData;
+   struct txo_entry *txo = clientData;
 
    free(txo->btc_addr);
    free(txo);
@@ -274,7 +274,7 @@ txdb_lookup_txo(const uint256 *txHash,
    memcpy(key,  txHash,   sizeof(uint256));
    memcpy(key + 32, &outIdx, sizeof(uint32));
 
-   s = hashtable_lookup(theTxdb->hash_txo, key, sizeof key, (void*)&txo_entry);
+   s = hashtable_lookup(theTxdb->hash_txo, key, sizeof key, (void **)&txo_entry);
    if (s == 0) {
       return NULL;
    }
@@ -450,9 +450,9 @@ txdb_get_tx_entry(const struct txdb *txdb,
    ASSERT(hash);
    ASSERT(txdb);
 
-   s = hashtable_lookup(txdb->hash_tx, hash, sizeof *hash, (void *)&txe);
-   if (s == 0) {
-      return NULL;
+s = hashtable_lookup(txdb->hash_tx, hash, sizeof *hash, (void **)&txe);
+    if (s == 0) {
+       return NULL;
    }
 
    return txe;
@@ -637,7 +637,7 @@ txdb_get_balance_cb(const void *key,
                     void       *clientData,
                     void       *keyData)
 {
-   struct txo_entry *txo_entry = (struct txo_entry *)keyData;
+   struct txo_entry *txo_entry = keyData;
    uint64 *balance = (uint64 *)clientData;
 
    if (txo_entry->spent == 0) {
@@ -1301,8 +1301,8 @@ txdb_sign_tx_inputs(struct txdb *txdb,
       int res;
       bool s;
 
-      s = hashtable_lookup(txdb->hash_tx, &txi->prevTxHash,
-                           sizeof txi->prevTxHash, (void *)&txe);
+s = hashtable_lookup(txdb->hash_tx, &txi->prevTxHash,
+                            sizeof txi->prevTxHash, (void **)&txe);
       ASSERT(s);
 
       ASSERT(txi->prevTxOutIdx < txe->tx.out_count);
@@ -1364,7 +1364,7 @@ txdb_get_coins_sorted(struct txdb *txdb)
    struct txo_entry *ptr = NULL;
    int n;
 
-   hashtable_linearize(txdb->hash_txo, sizeof(struct txo_entry), (void*)&ptr);
+   hashtable_linearize(txdb->hash_txo, sizeof(struct txo_entry), (void **)&ptr);
    ASSERT(ptr);
 
    n = hashtable_getnumentries(txdb->hash_txo);
@@ -1586,7 +1586,7 @@ txdb_export_tx_cb(const void *key,
                   void *keyData)
 {
    struct bitcui_tx **txiPtr = (struct bitcui_tx **)cbData;
-   struct tx_entry *txe = (struct tx_entry *)keyData;
+   struct tx_entry *txe = keyData;
    struct bitcui_tx *txi = *txiPtr;
    char hashStr[80];
 

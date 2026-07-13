@@ -70,7 +70,7 @@ void condvar_free(struct condvar *cv);
  */
 
 #define NOT_TESTED() \
-     log_warn("NOT_TESTED -- %s:%s:%u\n", __FILE__, __FUNCTION__, __LINE__)
+     log_warn("NOT_TESTED -- %s:%s:%u\n", __FILE__, __func__, __LINE__)
 
 #define NOT_TESTED_ONCE()       \
       do {                      \

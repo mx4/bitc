@@ -100,12 +100,12 @@ blockstore_lookup(const struct blockstore *bs,
    be = NULL;
    mutex_lock(bs->lock);
 
-   s = hashtable_lookup(bs->hash_orphans, hash, sizeof *hash, (void *)&be);
+   s = hashtable_lookup(bs->hash_orphans, hash, sizeof *hash, (void **)&be);
    if (s) {
       goto done;
    }
-   s = hashtable_lookup(bs->hash_blk, hash, sizeof *hash, (void *)&be);
-   if (s) {
+s = hashtable_lookup(bs->hash_blk, hash, sizeof *hash, (void **)&be);
+    if (s) {
       goto done;
    }
 done:
@@ -213,9 +213,9 @@ blockstore_get_block_height(struct blockstore *bs,
 
    mutex_lock(bs->lock);
 
-   s = hashtable_lookup(bs->hash_blk, hash, sizeof *hash, (void*)&be);
-   if (s == 0) {
-      char hashStr[80];
+s = hashtable_lookup(bs->hash_blk, hash, sizeof *hash, (void **)&be);
+    if (s == 0) {
+       char hashStr[80];
 
       uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
       Panic(LGPFX" block %s not found.\n", hashStr);
@@ -1085,7 +1085,7 @@ blockstore_is_next(struct blockstore *bs,
 
    mutex_lock(bs->lock);
 
-   s = hashtable_lookup(bs->hash_blk, prev, sizeof *prev, (void*)&be);
+   s = hashtable_lookup(bs->hash_blk, prev, sizeof *prev, (void **)&be);
    if (s == 0 || be->next == NULL) {
       mutex_unlock(bs->lock);
       return 0;
@@ -1123,7 +1123,7 @@ blockstore_get_next_hashes(struct blockstore *bs,
 
    mutex_lock(bs->lock);
 
-   s = hashtable_lookup(bs->hash_blk, start, sizeof *start, (void*)&be);
+   s = hashtable_lookup(bs->hash_blk, start, sizeof *start, (void **)&be);
    if (s == 0 || be->next == NULL) {
       goto exit;
    }

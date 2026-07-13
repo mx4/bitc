@@ -137,7 +137,7 @@ peergroup_free_tx_broadcast_cb(const void *key,
                                size_t keylen,
                                void *clientData)
 {
-   struct tx_broadcast *txb = (struct tx_broadcast *)clientData;
+   struct tx_broadcast *txb = clientData;
 
    peergroup_free_tx_broadcast_entry(txb);
 }
@@ -159,9 +159,9 @@ peergroup_stop_broadcast_tx(struct peergroup *pg,
    char hashStr[80];
    bool s;
 
-   s = hashtable_lookup(pg->hash_broadcast, hash, sizeof *hash, (void*)&txb);
-   if (s == 0) {
-      return;
+s = hashtable_lookup(pg->hash_broadcast, hash, sizeof *hash, (void **)&txb);
+    if (s == 0) {
+       return;
    }
 
    uint256_snprintf_reverse(hashStr, sizeof hashStr, hash);
@@ -193,9 +193,9 @@ peergroup_lookup_broadcast_tx(struct peergroup *pg,
 
    *bufOut = NULL;
 
-   s = hashtable_lookup(pg->hash_broadcast, hash, sizeof *hash, (void*)&txb);
-   if (s == 0) {
-      return 0;
+s = hashtable_lookup(pg->hash_broadcast, hash, sizeof *hash, (void **)&txb);
+    if (s == 0) {
+       return 0;
    }
 
    *bufOut = buff_dup(txb->buf);
@@ -444,7 +444,7 @@ peergroup_download_complete(void)
    if (btc->updateAndExit) {
       bitc_req_stop();
    } else {
-      log_info(LGPFX" %s -- BITC_STATE_READY.\n", __FUNCTION__);
+      log_info(LGPFX" %s -- BITC_STATE_READY.\n", __func__);
       btc->state = BITC_STATE_READY;
       peergroup_on_ready();
    }
@@ -1162,7 +1162,7 @@ peergroup_download_headers(struct peer *peer,
    peergroup_download_progress();
 
    if (btc->state == BITC_STATE_STARTING) {
-      log_info(LGPFX" %s -- BITC_STATE_UPDATE_HEADERS.\n", __FUNCTION__);
+      log_info(LGPFX" %s -- BITC_STATE_UPDATE_HEADERS.\n", __func__);
       btc->state = BITC_STATE_UPDATE_HEADERS;
       bitcui_set_status("online, fetching headers..");
       if (btc->peerGroup->numHdrToFetch > 0) {
@@ -1261,7 +1261,7 @@ peergroup_download_filtered_blocks(struct peer *peer)
       return 0;
    }
 
-   log_info(LGPFX" %s -- BITC_STATE_UPDATE_TXDB.\n", __FUNCTION__);
+   log_info(LGPFX" %s -- BITC_STATE_UPDATE_TXDB.\n", __func__);
    btc->state = BITC_STATE_UPDATE_TXDB;
    bitcui_set_status("online, fetching tx..");
 

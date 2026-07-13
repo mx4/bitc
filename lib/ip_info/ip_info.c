@@ -94,7 +94,7 @@ ipinfo_get_entry(const struct sockaddr_in *addr)
    ASSERT(mutex_islocked(btcui->lock));
 
    entry = NULL;
-   s = hashtable_lookup(hash_ipinfo, addr, sizeof *addr, (void *)&entry);
+   s = hashtable_lookup(hash_ipinfo, addr, sizeof *addr, (void **)&entry);
    if (s == 0) {
       return NULL;
    }
@@ -163,7 +163,7 @@ ipinfo_curl_write_cb(void *ptr,
    size_t len = size * nmemb;
    struct buff *buf = userp;
 
-   LOG(1, (LGPFX" %s got write of %zu bytes\n", __FUNCTION__, len));
+   LOG(1, (LGPFX" %s got write of %zu bytes\n", __func__, len));
    buff_copy_to(buf, ptr, len);
 
    return len;

@@ -128,6 +128,16 @@ void uint256_snprintf_reverse(char *s, size_t len, const uint256 *h);
 void uint160_snprintf_reverse(char *s, size_t len, const uint160 *h);
 bool uint256_from_str(const char *str, uint256 *hash);
 
+static inline const char *
+uint256_to_str(const uint256 *h)
+{
+   static char buf[4][80];
+   static int idx;
+   char *b = buf[idx++ & 3];
+   uint256_snprintf_reverse(b, 80, h);
+   return b;
+}
+
 void hash256_calc(const void *buf, size_t len, uint256 *hash);
 void hash160_calc(const void *buf, size_t bufLen, uint160 *digest);
 void hash4_calc(const void *buf, size_t len, uint8 hash[4]);

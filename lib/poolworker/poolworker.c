@@ -111,7 +111,7 @@ poolworker_execute_job(const struct poolworker_job *job)
 static void *
 poolworker_main(void *clientData)
 {
-   struct poolworker_state *pw = (struct poolworker_state *)clientData;
+   struct poolworker_state *pw = clientData;
    sigset_t set;
    int id;
 
