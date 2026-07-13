@@ -3,18 +3,19 @@
 ### BITC
 
 bitc is a *thin* SPV bitcoin client.
-* 100% C code,
-* support for linux, mac platforms,
-* console based: uses ncurses,
-* home grown async network i/o stack,
-* home grown poll loop,
-* home grown bitcoin engine,
-* supports encrypted wallet,
-* supports connecting via Tor/Socks5,
-* multi-threaded,
-* clean under AddressSanitizer and UBSan.
+* 100% C11,
+* support for Linux, macOS,
+* ncurses-based TUI,
+* home-grown async network I/O (single-threaded poll(2) loop),
+* home-grown Bitcoin P2P engine,
+* BIP157/158 compact block filters (not BIP37),
+* encrypted wallet (AES-256-CBC via OpenSSL EVP),
+* Tor/SOCKS5 support,
+* CPU offload pool for signature verification,
+* clean under ASan and UBSan.
 
-**WARNING:** this app is under development and may contain critical bugs.
+**WARNING:** this app is experimental and should not be used as a secure wallet.
+See [TODO.md](TODO.md) for the modernization roadmap.
 
 ---
 
@@ -58,7 +59,7 @@ You first need to install the build tools and libraries this app uses:
 
 then clone the git repository:
 ```
-   # git clone https://github.com/bit-c/bitc.git
+   # git clone https://github.com/mx4/bitc.git
 ```
 
 finally build and launch:
@@ -71,13 +72,33 @@ finally build and launch:
 
 Install the dependencies via `brew` (or `port`):
 ```
-   # brew install pkg-config openssl leveldb snappy curl ncurses cjson
+   # brew install pkg-config openssl leveldb snappy libcurl ncurses cjson
 ```
 then build and launch:
 ```
    # cd bitc && make
    # ./bitc
 ```
+
+#### Daemon Mode
+
+bitc can run headless without the ncurses UI:
+
+    ./bitc -d                          # daemon, no TUI
+    ./bitc -d --connect <ip>           # pin a specific peer
+    ./bitc -d --sync-and-exit          # sync headers then quit
+    ./bitc -z                          # wipe blockstore, addrbook, txdb
+
+The `-e` flag encrypts the wallet interactively. Self-tests: `./bitc -t 0`.
+
+#### Build Targets
+
+    make              # debug build (default)
+    make BUILD=release
+    make BUILD=asan   # AddressSanitizer
+    make BUILD=ubsan  # UndefinedBehaviorSanitizer
+    make check        # build + run fuzz-parse and test-gcs
+    make tags         # ctags index
 
 ---
 
@@ -130,14 +151,6 @@ Note that bitc encrypts each private key separately.
 
 ---
 
-#### Importing existing keys
-
-You need to modify your `~/.bitc/wallet.cfg` so that it contains the private
-key as exported by `bitcoin-qt` with the command `dumpprivkey`. More on that
-later.
-
----
-
 #### TOR / SOCKS5 support
 
 Bitc can route all outgoing TCP connections through a socks5 proxy. Since TOR
@@ -175,7 +188,7 @@ file](TODO.md)), and some of these may explain the behavior you're seeing.  If b
 crashes, please collect the log file along with the core dump and open a ticket
 on github:  
 
-	https://github.com/bit-c/bitc/issues
+	https://github.com/mx4/bitc/issues
 
 ---
 
